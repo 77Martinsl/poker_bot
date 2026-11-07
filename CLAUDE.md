@@ -36,32 +36,17 @@ python3-pip`.
   threads or generators as attributes. Load weights and data in `__init__`.
 - Imports are flat (`from card_utils import Card`): run code from the repo root,
   with `.venv/bin/python`.
-- Never guess a `GameStateView` name: use only those listed below. Editors
-  cannot autocomplete them, and any other name raises `AttributeError`.
+- Never guess a `GameStateView` name: use only those in README.md's
+  `GameStateView` tables. Editors cannot autocomplete them, and any other
+  name raises `AttributeError`.
 
-### How a bot is run
+### The bot API
 
-1. `Model()` is constructed and pickled once.
-2. Each hand, the engine builds `GameInterface(model, game_state, player_id,
-   hand)`, which calls `model.seed(hand, player_id)` once. Store both:
-   `run` is not given them again.
-3. On each of your turns, `model.run(actions, game_state)` is called:
-   - `actions`: every `PlayerAction` since your last turn this hand, oldest
-     first, your own previous move and the dealer's cards included.
-   - `game_state`: a read-only `GameStateView` of the hand, already updated
-     with `actions`.
-4. `run` returns one `PlayerAction` with your own `player_id`. A non-
-   `PlayerAction`, someone else's id or an illegal move raises
-   `InvalidAction`.
-5. After every hand, `model.end_game(actions, game_state)` is called if
-   your model has it (optional): `actions` is everything since your last
-   turn, ending with the showdown cards and the pot awards (see below), and
-   `game_state` is the final state. Learn from the hand here; there is
-   nothing to clear, since `seed` overwrites the per-hand fields next hand.
+How a bot is run, the rules, `PlayerAction`, `GameStateView`, cards and hand
+strength, an example bot and the common mistakes live in README.md (section
+"3. What your bot sees"), the single source for them:
 
-The same `Model` object plays hand after hand (in evals, within one seat
-rotation), so whatever it keeps in attributes between hands is what it has
-learned, e.g. per opponent by `game_state.teams`.
+@README.md
 
 ### Errors
 
@@ -78,119 +63,6 @@ Two kinds, both subclasses of `ValueError`:
   e.g. out of turn or a raise outside `raise_range`.
 
 The horizon is one hand: a fresh `GameInterface` (and `seed`) every hand.
-
-### Game rules as implemented
-
-- Players are numbered `0..n-1`; every per-player tuple is indexed by id.
-  The dealer is player `-1` (`player_action.DEALER`).
-- Blinds are posted automatically (default 10/20, stacks 500). Heads-up, the
-  button posts the small blind and acts first preflop; after the flop the
-  first player after the button acts first.
-- The dealer turns board cards over one at a time (`kind == "reveal_card"`,
-  `player_id == DEALER`): the 3rd, 4th and 5th card open the flop, turn and
-  river. Check `player_id == DEALER` before treating a `reveal_card` as a
-  board card: players' shown cards use the same kind.
-- When the hand is over, at a showdown every player still in shows both
-  hole cards (`reveal_card` with their own `player_id`), seats from the
-  button's left. A player who wins because everyone else folded shows
-  nothing. Then each player who won chips gets one `win` (`amount` = total
-  chips from every pot, their own uncalled chips included).
-- `raise_to(total)` names your **total bet this street**, not the increment.
-  Legal totals are `min_raise_to..max_raise_to` (`raise_range`).
-- A raise must be at least the last full raise (`last_raise`). An all-in
-  smaller than that does not reopen betting for players who already acted.
-- Fold and call are always legal on your turn. `call` checks when nothing is
-  owed and calls all-in for less when your stack is short.
-
-### API
-
-`PlayerAction` (`player_action.py`), always built with a constructor:
-
-| Constructor | Meaning |
-|---|---|
-| `PlayerAction.fold(player_id)` | fold |
-| `PlayerAction.call(player_id)` | call, or check when `call_amount == 0` |
-| `PlayerAction.raise_to(player_id, total)` | raise to a street total |
-
-Fields: `player_id`, `kind` (`"fold"`, `"call"`, `"raise"`, `"reveal_card"`,
-`"win"`), `amount` (raise total, or chips won), `card` (for `reveal_card`).
-Only the engine builds `reveal_card` and `win`; returning them from `run` is
-an illegal move.
-
-`Card` (`card_utils.py`): `Card.parse("AS")`, `card.rank` (`"2".."9"`, `"T"`, `"J"`,
-`"Q"`, `"K"`, `"A"`), `card.suit` (`"C"`, `"D"`, `"H"`, `"S"`), `card.value`
-(2 to 14, ace high), `str(card) == "AS"`. Compare ranks with `.value`, never
-with the rank strings.
-
-`GameStateView` (`game_state.py`): every name you can read. Lists come back as
-tuples.
-
-| The table | |
-|---|---|
-| `button`, `small_blind`, `big_blind` | player id; chips; chips |
-| `stacks`, `bets`, `folded`, `acted` | per player: chips behind, chips bet this street, bools |
-| `teams` | per player: team name. Seats change between hands, names do not: your team is `teams[self.player_id]`, a team's seat is `teams.index(name)` |
-| `board` | Cards dealt so far |
-| `street` | `"preflop"`, `"flop"`, `"turn"`, `"river"` |
-| `pot` | every chip put in this hand, this street's bets included |
-| `last_raise` | size of the last full raise this street |
-| `to_act` | player id to act, `None` when the street is closed |
-| `num_players`, `players_in_hand`, `active_players` | count; ids not folded; ids not folded and not all-in |
-| `is_street_closed`, `is_hand_over` | bools |
-| `current_bet` | the street total everyone must reach |
-
-| Any player (methods) | |
-|---|---|
-| `status(player_id)` | `"active"`, `"folded"` or `"all_in"` |
-| `effective_stack(player_id)` | their chips behind, capped by the biggest other stack still in (chips already bet excluded) |
-| `spr(player_id)` | `effective_stack / pot` |
-
-| The player to act (you, inside `run`) | |
-|---|---|
-| `call_amount` | chips a call adds (0 = check) |
-| `min_raise_to`, `max_raise_to`, `raise_range` | legal raise totals; `raise_range` is `None` when you cannot raise |
-| `can_raise` | bool |
-| `legal_actions` | property, no `()`: e.g. `("fold", "call", "raise")` |
-| `pot_odds` | `call_amount / (pot + call_amount)`, `0.0` when checking |
-| `validate_action(action)` | raises `InvalidAction` if `action` is illegal |
-
-`evaluate(cards)` (also in `card_utils.py`) takes 5 to 7 Cards (a list or tuple) and returns a tuple that
-compares with `<`/`>` (higher wins, equal splits); `category(rank)` names it,
-e.g. `"full_house"`. `rank[0]` indexes `CATEGORIES`, from `0` (high card) to
-`8` (straight flush). Typical use: `evaluate(self.hand + list(game_state.board))`.
-
-### Example bot
-
-```python
-from card_utils import evaluate
-from player_action import PlayerAction
-
-
-class Model:
-    def __init__(self):
-        self.hand = []
-        self.player_id = None
-
-    def seed(self, hand, player_id):
-        self.hand = hand
-        self.player_id = player_id
-
-    def run(self, actions, game_state):
-        me = self.player_id
-        if len(game_state.board) >= 3:
-            # Two pair or better (see card_utils.CATEGORIES).
-            strong = evaluate(self.hand + list(game_state.board))[0] >= 2
-        else:
-            high, low = sorted(card.value for card in self.hand)[::-1]
-            strong = high == low or low >= 10  # a pair, or two high cards
-        if strong and "raise" in game_state.legal_actions:
-            low, high = game_state.raise_range
-            # Raise to about the pot, kept within the legal range.
-            return PlayerAction.raise_to(me, min(high, max(low, game_state.pot)))
-        if game_state.call_amount == 0 or game_state.pot_odds < 0.25:
-            return PlayerAction.call(me)
-        return PlayerAction.fold(me)
-```
 
 ### Testing locally
 
@@ -257,14 +129,9 @@ arena module (`random.py`, `engine.py`), nor sit in a folder.
 
 ### Common mistakes
 
-- Reading `call_amount`, `min_raise_to`, `can_raise`, `legal_actions`,
-  `raise_range` or `pot_odds` outside your turn: they describe `to_act`.
-- Calling `legal_actions()` with brackets: it is a property.
+Besides those in README.md:
+
 - Mutating `board` or `stacks`: they are tuples; copy with `list(...)`.
-- Treating `raise_to(x)` as "raise by x".
-- Forgetting to store `hand` and `player_id` in `seed`.
-- Treating every `reveal_card` as a board card: players' shown cards at a
-  showdown have their own `player_id`, the board's have `DEALER`.
 - Wiping learned data between hands (e.g. re-running `__init__` in
   `end_game` or `seed`): keep what you learn in attributes `seed` does not
   overwrite.
@@ -356,7 +223,7 @@ others call the full big blind (currently they only call what was posted).
   `tests/arena_tests/`, about 30 s in total). Keep them passing.
   `tests/test_model.py` runs the team's own `Model`.
 - A new `GameState` query must also be added to `GameStateView.PUBLIC` and
-  to the API tables above.
+  to README.md's `GameStateView` tables (`tests/test_docs.py` checks this).
 - Validation uses Pydantic v2 in strict mode, and only at entry points:
   `Card` and `PlayerAction` are strict Pydantic dataclasses (not
   `BaseModel`, so positional construction keeps working), and
