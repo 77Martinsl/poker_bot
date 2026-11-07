@@ -1,0 +1,32 @@
+{
+  "tagline": "Write a poker bot. Submit it. Best bot wins.",
+  "intro": [
+    "Today you write a Python bot that plays heads-up no-limit Texas Hold'em. Your bot only decides what to do each turn; the engine deals the cards and enforces the rules.",
+    "When hacking ends you submit your bot as a pickle file plus the Python files it came from, in the submission form. There is one round: every submitted bot plays every other bot, each pairing over many deals with the seats swapped so card luck mostly cancels. The bot with the best score is the champion."
+  ],
+  "prize": "£300 prize pot",
+  "timeline": [
+    {
+      "time": "12:00",
+      "title": "Hacking starts",
+      "detail": "Set up, write your bot and test it with python -m evals. Run python -m submit --team yourteam early, so you know the process well before the deadline."
+    },
+    {
+      "time": "18:00",
+      "title": "Submission deadline",
+      "detail": "Upload your .pkl and your .py files in the submission form. The newest upload that works before 18:00 is the one that plays."
+    },
+    {
+      "time": "After 18:00",
+      "title": "The round",
+      "detail": "The organisers read the submitted code, then every bot plays every other bot. The results and replays appear on this site a little behind the real play, and the champion appears with the last match."
+    }
+  ],
+  "rules": [
+    "One bot per team, submitted with python -m submit as myteam.pkl plus your .py files.",
+    "Every move has a time limit of 10 seconds. A crash, a timeout or an illegal move is a fault: the engine checks or folds for you, and a bot that times out is out for the rest of that match.",
+    "Keep weights and data inside your model (load them in __init__); files on disk are not available when your bot plays.",
+    "Your code is read before it runs. Do not use the network, the file system, or the engine's internals, and do not attack other teams' bots or the organisers' machine."
+  ],
+  "contact": "Stuck? Find an organiser in the room. python -m submit shows what the code review will flag before you upload."
+}

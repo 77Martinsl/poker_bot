@@ -2,3 +2,6 @@ __pycache__/
 .venv/
 .hypothesis/
 .pytest_cache/
+site-src/node_modules/
+event/
+site_out/
