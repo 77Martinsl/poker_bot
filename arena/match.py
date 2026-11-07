@@ -2,13 +2,14 @@ import hashlib
 import os
 import random
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Literal
 
 from arena.players import Player, build
 from arena.remote import TIME_LIMIT
 from card_utils import full_deck
-from engine import play_hand
+from engine import HandResult, play_hand
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,24 @@ class HandLog:
 
 
 @dataclass
+class HandRecord:
+    """One played hand in full, for whoever wants to replay it. Handed to
+    the on_hand callback of play_match; never part of a MatchLog."""
+
+    rotation: int
+    deal: int
+    seats: list[str]  # name in each seat
+    stacks: list[int]  # chips behind at the start, per seat
+    button: int  # seat
+    small_blind: int
+    big_blind: int
+    result: HandResult  # actions, hole cards, board, net, faults
+
+
+OnHand = Callable[[HandRecord], None]
+
+
+@dataclass
 class MatchLog:
     names: list[str]
     config: MatchConfig
@@ -45,20 +64,24 @@ class MatchLog:
     checkpoints: dict[str, str] = field(default_factory=dict)  # name: path
 
 
-def play_match(players: list[Player], config: MatchConfig) -> MatchLog:
+def play_match(players: list[Player], config: MatchConfig,
+               on_hand: OnHand | None = None) -> MatchLog:
     """
     Duplicate mode plays every deal once per seat rotation, so every
     player sits in every seat with every deck, and stacks reset each hand.
     Tournament mode plays up to config.deals hands with stacks carried
     over, until one player has every chip, then checkpoints the models.
+
+    on_hand, if given, is called with a HandRecord after every hand (to
+    record replays); it does not change the match.
     """
     _validate(players, config)
     names = [p.name for p in players]
     log = MatchLog(names, config, [], {name: 0.0 for name in names})
     if config.mode == "duplicate":
-        _play_duplicate(players, config, log)
+        _play_duplicate(players, config, log, on_hand)
     else:
-        _play_tournament(players, config, log)
+        _play_tournament(players, config, log, on_hand)
     return log
 
 
@@ -135,7 +158,7 @@ def _deck(key: str) -> list:
     return deck
 
 
-def _play_duplicate(players, config, log) -> None:
+def _play_duplicate(players, config, log, on_hand=None) -> None:
     count = len(players)
     order = [p.name for p in players]
     if count >= 3:
@@ -160,6 +183,11 @@ def _play_duplicate(players, config, log) -> None:
                 log.hands.append(
                     HandLog(k, d, seated, result.net, result.faults)
                 )
+                if on_hand is not None:
+                    on_hand(HandRecord(
+                        k, d, list(seated), [config.stack] * count, 0,
+                        config.small_blind, config.big_blind, result,
+                    ))
         except BaseException:
             _close(timed.values())  # the error already raised wins
             raise
@@ -169,7 +197,7 @@ def _play_duplicate(players, config, log) -> None:
             raise error
 
 
-def _play_tournament(players, config, log) -> None:
+def _play_tournament(players, config, log, on_hand=None) -> None:
     names = [p.name for p in players]
     stacks = _starting_stacks(names, config)
     timed: dict[str, _Timed] = {}
@@ -201,9 +229,15 @@ def _play_tournament(players, config, log) -> None:
                 config.big_blind,
                 seated,
             )
+            before = [stacks[name] for name in seated]
             for seat, name in enumerate(seated):
                 stacks[name] += result.net[seat]
             log.hands.append(HandLog(0, h, seated, result.net, result.faults))
+            if on_hand is not None:
+                on_hand(HandRecord(
+                    0, h, list(seated), before, seated.index(button),
+                    config.small_blind, config.big_blind, result,
+                ))
         log.final_stacks = stacks
         if config.checkpoint_dir is not None:
             for name in names:
