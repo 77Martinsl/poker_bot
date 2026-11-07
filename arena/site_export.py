@@ -18,7 +18,6 @@ import hashlib
 import json
 import math
 import os
-import shutil
 import subprocess
 import time
 from dataclasses import dataclass
@@ -42,6 +41,11 @@ class Options:
     max_hands: int = 60
     event: dict | None = None  # the Home page text, see load_event
     guide: str = ""  # markdown for the How to submit page
+    # The submission form's address. It is NEVER written to a file in the
+    # repository; it appears in the published data only while submissions
+    # are open (see submission_state).
+    form_url: str = ""
+    submissions: str = "closed"  # closed (not yet), open, or over
 
 
 def load_event(path: str) -> dict:
@@ -70,13 +74,44 @@ def load_event(path: str) -> dict:
                 "title": text(row.get("title"), 120),
                 "detail": text(row.get("detail")),
             })
-    return {
+    repo = text(raw.get("repo"), 200)
+    event = {
         "tagline": text(raw.get("tagline"), 200),
         "intro": texts(raw.get("intro")),
         "prize": text(raw.get("prize"), 200),
         "timeline": timeline,
         "rules": texts(raw.get("rules")),
         "contact": text(raw.get("contact")),
+        "repo": repo if repo.startswith("https://") else "",
+    }
+    window = raw.get("submissions")
+    if isinstance(window, dict):
+        # Display text only ("16:00"): the organiser decides when submissions
+        # open and close by running the export with --submissions.
+        event["submissions"] = {
+            "opens": text(window.get("opens"), 40),
+            "closes": text(window.get("closes"), 40),
+        }
+    return event
+
+
+def submission_state(event: dict | None, form_url: str,
+                     status: str = "closed") -> dict:
+    """Whether teams may submit, and the form's address when they may.
+
+    status is what the organiser says: "closed" (not open yet), "open" or
+    "over". The address is released only while it is "open", so it cannot be
+    found on the site, or in its git history, before then."""
+    window = (event or {}).get("submissions") or {}
+    is_open = status == "open"
+    return {
+        "status": "open" if is_open else "closed",
+        "why": None if is_open else ("over" if status == "over"
+                                     else "not_yet"),
+        "opens": window.get("opens", ""),
+        "closes": window.get("closes", ""),
+        "form_url": form_url if is_open and form_url.startswith(
+            "https://") else None,
     }
 
 
@@ -375,6 +410,8 @@ def export_site(event: Event, out: str, options: Options,
         "".join(files[n] for n in sorted(files)).encode()
         + guide.encode()
         + _json(options.event or {}).encode()
+        + _json(submission_state(
+            options.event, options.form_url, options.submissions)).encode()
         + options.title.encode()
         + "".join(sorted(replays)).encode()
         + _json([r["shown"] for r in replays.values()]).encode()
@@ -390,9 +427,12 @@ def export_site(event: Event, out: str, options: Options,
             changed = True
     except (FileNotFoundError, ValueError):
         changed = True
+    submissions = submission_state(
+        options.event, options.form_url, options.submissions)
     manifest = {
         "schema": SCHEMA,
         "title": options.title,
+        "submissions": submissions,
         "submit_text": "",
         "has_guide": bool(guide.strip()),
         "has_event": bool(options.event),
@@ -443,8 +483,14 @@ def git_publish(out: str, message: str) -> bool:
 
 def export_loop(event: Event, args) -> None:
     """The export command: once, or every args.loop seconds."""
-    options = Options(title=args.title, delay=args.delay,
-                      spacing=args.spacing, max_hands=args.max_hands)
+    options = Options(
+        title=args.title, delay=args.delay, spacing=args.spacing,
+        max_hands=args.max_hands,
+        # From the command line or the environment, never from a file in
+        # the repository: it must not be public before submissions open.
+        form_url=args.form_url or os.environ.get("POKER_FORM_URL", ""),
+        submissions=args.submissions,
+    )
     if args.event_file and os.path.isfile(args.event_file):
         options.event = load_event(args.event_file)
     if args.guide and os.path.isfile(args.guide):

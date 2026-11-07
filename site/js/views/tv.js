@@ -168,7 +168,7 @@ export function tvView(ctx) {
         title.replaceChildren(
           slide.name,
           ' ',
-          tournament ? h('span', { class: 'badge' }, phaseInfo(ctx.data.tournament.phase).label) : kindBadge(ctx.kind),
+          tournament ? h('span', { class: 'badge' }, phaseInfo(ctx.data.tournament.phase, ctx.data.tournament.submissions).label) : kindBadge(ctx.kind),
         );
         body.replaceChildren(content);
         dots.replaceChildren(...slides.map((_, i) => h('span', { class: i === index ? 'on' : '' })));

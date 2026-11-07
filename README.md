@@ -6,7 +6,9 @@ against other teams' bots.
 
 ## 1. Fork and set up
 
-1. **Fork this repo** on GitHub and clone your fork.
+1. **Get the code.** Fork https://github.com/Manchester-AI-Society/poker_bot
+   on GitHub and clone your fork (or just clone it:
+   `git clone https://github.com/Manchester-AI-Society/poker_bot.git`).
 2. Create a virtual environment and install the dependencies (Python 3.10+;
    Windows, macOS and Linux all work):
 
@@ -75,7 +77,9 @@ the way the organisers will: it lists the files you must upload, shows
 anything the code review will flag, and plays your model from a clean copy of
 just those files against the dummy bots. Fix anything it reports, then upload
 **every file it lists** (`myteam.pkl` and your `.py` files) in the submission
-form (the link is on the event website). Submit again before the deadline if
+form. The form opens at 16:00 and its link appears then on the event
+website (until then submissions are closed); the deadline is 18:00. Submit
+again before the deadline if
 you improve it: the newest upload that works is the one that plays.
 
 What the review looks for:

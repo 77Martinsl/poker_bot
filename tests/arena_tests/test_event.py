@@ -436,7 +436,7 @@ def test_the_event_file_is_tidied(tmp_path):
     assert site_export.load_event(str(path)) == {
         "tagline": "Go", "intro": ["a"], "prize": "300",
         "timeline": [{"time": "12:00", "title": "S", "detail": "d"}],
-        "rules": [], "contact": ""}
+        "rules": [], "contact": "", "repo": ""}
     path.write_text("[1]")
     with pytest.raises(SystemExit):
         site_export.load_event(str(path))
@@ -447,7 +447,9 @@ def test_the_event_file_is_tidied(tmp_path):
 def test_the_repositorys_event_file_loads():
     found = site_export.load_event(os.path.join(E.REPO, "event.json"))
     assert found["timeline"] and found["intro"] and found["prize"]
-    assert "16:00" not in json.dumps(found)
+    # submissions open at 16:00 and close at 18:00: nothing says 4pm closes
+    times = [row["time"] for row in found["timeline"]]
+    assert times[:4] == ["12:00", "16:00", "18:00", "After 18:00"]
 
 
 # -- the command line --------------------------------------------------------
@@ -525,3 +527,126 @@ def test_a_match_hook_sees_every_hand_and_changes_nothing():
     assert len(seen) == len(hooked.hands) == 6
     assert seen[0].seats == hooked.hands[0].seats
     assert seen[0].button == 0 and seen[0].stacks == [500, 500]
+
+
+# -- submissions: the form link is released only when the organiser says --
+
+FORM = "https://forms.example/secret-form-link"
+EVENT = {"submissions": {"opens": "16:00", "closes": "18:00"}}
+
+
+def test_the_form_link_exists_only_while_submissions_are_open():
+    state = site_export.submission_state
+    closed = state(EVENT, FORM, "closed")
+    assert closed["status"] == "closed" and closed["why"] == "not_yet"
+    assert closed["form_url"] is None and closed["opens"] == "16:00"
+    opened = state(EVENT, FORM, "open")
+    assert opened["status"] == "open" and opened["form_url"] == FORM
+    assert opened["closes"] == "18:00" and opened["why"] is None
+    over = state(EVENT, FORM, "over")
+    assert over["status"] == "closed" and over["why"] == "over"
+    assert over["form_url"] is None
+    assert state({}, FORM)["status"] == "closed"  # closed unless told
+    assert state(EVENT, "javascript:alert(1)", "open")["form_url"] is None
+    assert state(EVENT, "", "open")["form_url"] is None
+
+
+def event_with_window(tmp_path):
+    path = tmp_path / "event.json"
+    path.write_text(json.dumps({**EVENT, "intro": ["x"],
+                                "repo": "https://example.org/code"}))
+    return site_export.load_event(str(path))
+
+
+def published_text(out):
+    text = ""
+    for current, _, files in os.walk(out):
+        for name in files:
+            if name.endswith((".json", ".md", ".html", ".js")):
+                with open(os.path.join(current, name), encoding="utf-8",
+                          errors="ignore") as file:
+                    text += file.read()
+    return text
+
+
+@pytest.mark.parametrize("say, secret_visible, status", [
+    ("closed", False, "closed"), ("open", True, "open"),
+    ("over", False, "closed")])
+def test_the_site_carries_the_form_link_only_when_told_open(
+        ev, drive, tmp_path, say, secret_visible, status):
+    upload(drive, "Ann Lee", "alpha", {"model.py": E.CALL})
+    import_folder(ev, str(drive))
+    out = str(tmp_path / "site")
+    options = Options(event=event_with_window(tmp_path), form_url=FORM,
+                      submissions=say)
+    export_site(ev, out, options)
+    assert load(out, "manifest.json")["submissions"]["status"] == status
+    assert (FORM in published_text(out)) is secret_visible
+    assert load(out, "event.json")["repo"] == "https://example.org/code"
+
+
+def test_the_site_is_closed_by_default_even_with_the_link_given(
+        ev, drive, tmp_path):
+    upload(drive, "Ann Lee", "alpha", {"model.py": E.CALL})
+    import_folder(ev, str(drive))
+    out = str(tmp_path / "site")
+    export_site(ev, out, Options(event=event_with_window(tmp_path),
+                                 form_url=FORM))
+    assert FORM not in published_text(out)
+    assert load(out, "manifest.json")["submissions"]["status"] == "closed"
+
+
+def test_the_link_leaves_the_data_again_when_submissions_close(
+        ev, drive, tmp_path):
+    upload(drive, "Ann Lee", "alpha", {"model.py": E.CALL})
+    import_folder(ev, str(drive))
+    out = str(tmp_path / "site")
+    event = event_with_window(tmp_path)
+    export_site(ev, out, Options(event=event, form_url=FORM,
+                                 submissions="open"))
+    assert FORM in published_text(out)
+    export_site(ev, out, Options(event=event, form_url=FORM,
+                                 submissions="over"))
+    assert FORM not in published_text(out)
+
+
+def test_the_repositorys_event_file_never_holds_the_form_link():
+    path = os.path.join(E.REPO, "event.json")
+    with open(path, encoding="utf-8") as file:
+        text = file.read()
+    assert "forms.gle" not in text and "docs.google.com/forms" not in text
+    found = site_export.load_event(path)
+    assert found["repo"] == "https://github.com/Manchester-AI-Society/poker_bot"
+    assert found["submissions"] == {"opens": "16:00", "closes": "18:00"}
+
+
+def test_the_event_file_reads_the_window_text_and_the_repo(tmp_path):
+    found = event_with_window(tmp_path)
+    assert found["repo"] == "https://example.org/code"
+    assert found["submissions"] == {"opens": "16:00", "closes": "18:00"}
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({"repo": "http://plain.example"}))
+    assert site_export.load_event(str(bad))["repo"] == ""
+    assert "submissions" not in site_export.load_event(str(bad))
+
+
+def test_the_command_line_defaults_to_closed_and_takes_the_link_from_env(
+        drive, tmp_path):
+    upload(drive, "Ann Lee", "alpha", {"model.py": E.CALL})
+    root = str(tmp_path / "event")
+    run_cli(["arena.event", "--root", root, "import", str(drive)])
+    out = str(tmp_path / "site")
+    env = dict(os.environ, POKER_FORM_URL=FORM, PYTHONDONTWRITEBYTECODE="1")
+
+    def export(*extra):
+        return subprocess.run(
+            [sys.executable, "-m", "arena.event", "--root", root, "export",
+             "--out", out, "--event-file", os.path.join(E.REPO, "event.json"),
+             *extra], cwd=E.REPO, capture_output=True, text=True, env=env)
+
+    assert export().returncode == 0
+    assert FORM not in published_text(out)
+    assert export("--submissions", "open").returncode == 0
+    assert FORM in published_text(out)
+    assert export("--submissions", "over").returncode == 0
+    assert FORM not in published_text(out)

@@ -1,6 +1,7 @@
 import { loadGuide } from '../api.js';
 import { h } from '../dom.js';
 import { renderMarkdown } from '../markdown.js';
+import { submissionsCard } from './home.js';
 import { isTournament } from '../tournament-core.js';
 
 /** The how-to-submit guide (SUBMITTING.md), shown as a page. */
@@ -20,6 +21,8 @@ export async function guideView(ctx) {
     page.appendChild(h('div', { class: 'empty card' }, 'The guide could not be loaded. This page tries again every few seconds.'));
     return { el: page, title: 'How to submit' };
   }
+  const submissions = submissionsCard(ctx.data.submissions);
+  if (submissions) page.appendChild(submissions);
   page.appendChild(renderMarkdown(text));
   if (!isTournament(ctx.data.manifest)) {
     // The tournament has no repository submissions to check on.

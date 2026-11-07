@@ -30,7 +30,7 @@ export function teamChips(names, label) {
 
 /** The phase in plain words. */
 export function phaseBanner(t) {
-  const info = phaseInfo(t.phase);
+  const info = phaseInfo(t.phase, t.submissions);
   return h(
     'section',
     { class: 'phase card', 'aria-label': 'Tournament status' },

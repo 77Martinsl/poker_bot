@@ -3,11 +3,12 @@
 // are keyed by it so a CDN or browser can cache them between changes.
 
 import { isTournament, normalizeTeams, normalizeTournament, tournamentFiles } from './tournament-core.js';
-import { normalizeEvent } from './event-core.js';
+import { normalizeEvent, normalizeSubmissions } from './event-core.js';
 
 export const data = {
   manifest: null,
   tournament: null, // tournament.json, normalised; null in the ladder format
+  submissions: null, // manifest.submissions, normalised
   boards: {},
   pairings: {},
   teams: [],
@@ -81,6 +82,8 @@ async function loadTournament(manifest) {
     if (board) data.boards[kind] = board;
   });
   data.tournament = normalizeTournament(tournament);
+  data.submissions = normalizeSubmissions(manifest.submissions);
+  data.tournament.submissions = data.submissions;
   data.event = normalizeEvent(event);
   data.teams = normalizeTeams(teams && teams.teams);
   data.registrations = [];

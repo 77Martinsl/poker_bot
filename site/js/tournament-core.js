@@ -6,6 +6,7 @@
 // helpers therefore treat every result field as possibly missing, and say
 // "results are shown when the round is complete" instead of showing zeros.
 
+import { submissionsText } from './event-core.js';
 import { ago } from './format.js';
 
 export const NOT_YET = 'Results are shown when the round is complete.';
@@ -52,8 +53,10 @@ export function registerFormOpen(manifest) {
 }
 
 /** {phase, label, text, known} for a phase name; unknown names stay readable. */
-export function phaseInfo(phase) {
+export function phaseInfo(phase, submissions = null) {
   const info = PHASES[phase];
+  // Before the draw the banner says whether teams may submit right now.
+  if (phase === 'registration' && submissions) return { phase, ...submissionsText(submissions), known: true };
   if (info) return { phase, ...info, known: true };
   return { phase: phase || '', label: 'Tournament', text: 'The tournament is under way.', known: false };
 }

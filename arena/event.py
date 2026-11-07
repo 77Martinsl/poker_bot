@@ -474,6 +474,14 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--guide", default="README.md")
     p.add_argument("--loop", type=float, metavar="SECONDS",
                    help="keep exporting every SECONDS")
+    p.add_argument("--form-url", default="", metavar="URL",
+                   help="the submission form (or set POKER_FORM_URL); "
+                        "published only while submissions are open")
+    p.add_argument("--submissions", choices=["closed", "open", "over"],
+                   default="closed",
+                   help="what the site says about submitting: closed (not "
+                        "open yet; the default), open (shows the form link) "
+                        "or over (the deadline has passed)")
     p.add_argument("--git-push", action="store_true")
 
     args = parser.parse_args(argv)

@@ -3,10 +3,32 @@
 // untrusted: it is only ever shown as text.
 
 import { h } from '../dom.js';
+import { submissionsText } from '../event-core.js';
 
 const FALLBACK_INTRO = [
   'Teams write a Python poker bot and hand it in as one file. The organiser plays every bot on one machine and the results appear on this site.',
 ];
+
+/**
+ * Whether teams can submit right now, and (only while open) the form's link.
+ * null when the event sets no window.
+ */
+export function submissionsCard(sub) {
+  const info = submissionsText(sub);
+  if (!info) return null;
+  const open = sub.status === 'open';
+  return h(
+    'section',
+    { class: 'card submissions', 'aria-labelledby': 'submissions-h' },
+    h('h2', { id: 'submissions-h' }, 'Submissions ', h('span', { class: open ? 'badge ok' : 'badge' }, open ? 'open' : 'closed')),
+    h('p', { class: 'home-text' }, info.text),
+    open
+      ? sub.formUrl
+        ? h('p', {}, h('a', { class: 'button', href: sub.formUrl, target: '_blank', rel: 'noopener noreferrer' }, 'Open the submission form'))
+        : h('p', { class: 'note' }, 'The form link appears here in a moment.')
+      : null,
+  );
+}
 
 /** The Home page. */
 export function homeView(ctx) {
@@ -24,8 +46,12 @@ export function homeView(ctx) {
       { class: 'home-cta' },
       h('a', { class: 'button', href: '#/submit' }, 'How to submit'),
       h('a', { class: 'button', href: '#/tournament' }, 'Tournament'),
+      event && event.repo ? h('a', { class: 'button', href: event.repo, target: '_blank', rel: 'noopener noreferrer' }, 'Get the code') : null,
     ),
   );
+
+  const submissions = submissionsCard(ctx.data.submissions);
+  if (submissions) page.appendChild(submissions);
 
   page.appendChild(
     h('section', { class: 'card', 'aria-labelledby': 'challenge-h' }, h('h2', { id: 'challenge-h' }, 'The challenge'), intro.map((paragraph) => h('p', { class: 'home-text' }, paragraph))),
