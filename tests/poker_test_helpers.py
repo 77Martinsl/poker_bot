@@ -2,7 +2,7 @@
 
 from card import RANKS, SUITS, Card
 from game_state import GameState
-from player_action import PlayerAction
+from player_action import DEALER, PlayerAction
 
 
 def std_deck():
@@ -161,23 +161,61 @@ class RandomBot:
         return act
 
 
+END_KINDS = ("reveal_card", "win")
+
+
+def is_end_action(action):
+    """A showdown reveal (from a player) or a pot award."""
+    return action.kind == "win" or (
+        action.kind == "reveal_card" and action.player_id >= 0)
+
+
 def replay(result, stacks, button=0, small_blind=10, big_blind=20,
            teams=None):
-    """Applies result.actions to a fresh GameState; checks the hand ends
-    exactly at the last action. Returns (state, states_before) where
-    states_before[i] is (to_act, call_amount) before action i."""
+    """Applies result.actions to a fresh GameState. Betting moves and
+    dealer reveals must finish the hand; only player reveals and wins may
+    follow. Returns (state, states_before, contributed): the final state
+    (stacks after the wins), (to_act, call_amount) before each action
+    ((None, None) once the street is closed or the hand is over), and the
+    chips each seat put in."""
     state = GameState(list(stacks), teams=teams)
     state.setup_hand(list(stacks), button, small_blind, big_blind, teams)
     before = []
+    contributed = None
     for action in result.actions:
-        assert not state.is_hand_over, "action recorded after the hand ended"
+        if state.is_hand_over and contributed is None:
+            contributed = [stacks[i] - state.stacks[i]
+                           for i in range(len(stacks))]
+        if state.is_hand_over:
+            assert is_end_action(action), (
+                f"{action} recorded after the hand ended")
+        else:
+            assert not is_end_action(action), (
+                f"{action} recorded before the hand ended")
         if state.is_street_closed:
             before.append((None, None))
         else:
             before.append((state.to_act, state.call_amount))
         state.process_action(action)
     assert state.is_hand_over, "recorded actions do not finish the hand"
-    return state, before
+    if contributed is None:
+        contributed = [stacks[i] - state.stacks[i]
+                       for i in range(len(stacks))]
+    return state, before, contributed
+
+
+def expected_end(hands, folded, pay, button):
+    """The actions that close a hand: showdown reveals (only if more than
+    one seat is left), then one win per seat paid, both in seat order from
+    the left of the button."""
+    n = len(hands)
+    order = [(button + k) % n for k in range(1, n + 1)]
+    alive = [s for s in order if not folded[s]]
+    reveals = [] if len(alive) == 1 else [
+        PlayerAction.reveal_card(c, player_id=s) for s in alive
+        for c in hands[s]]
+    wins = [PlayerAction.win(s, pay[s]) for s in order if pay[s] > 0]
+    return reveals + wins
 
 
 def check_result(result, deck, stacks, button=0, small_blind=10,
@@ -188,10 +226,11 @@ def check_result(result, deck, stacks, button=0, small_blind=10,
     n = len(stacks)
     assert result.hands == [[deck[2 * i], deck[2 * i + 1]] for i in range(n)]
     assert result.board == deck[2 * n:2 * n + len(result.board)]
-    reveals = [a.card for a in result.actions if a.kind == "reveal_card"]
+    reveals = [a.card for a in result.actions
+               if a.kind == "reveal_card" and a.player_id == DEALER]
     assert reveals == result.board
-    state, _ = replay(result, stacks, button, small_blind, big_blind, teams)
-    contributed = [stacks[i] - state.stacks[i] for i in range(n)]
+    state, _, contributed = replay(result, stacks, button, small_blind,
+                                   big_blind, teams)
     if len(state.players_in_hand) > 1:
         assert len(result.board) == 5
     pay = payouts(contributed, list(state.folded), result.hands,
@@ -199,4 +238,9 @@ def check_result(result, deck, stacks, button=0, small_blind=10,
     assert result.net == [pay[i] - contributed[i] for i in range(n)]
     assert sum(result.net) == 0
     assert all(result.net[i] >= -stacks[i] for i in range(n))
+    assert list(state.stacks) == [stacks[i] + result.net[i]
+                                  for i in range(n)]
+    tail = expected_end(result.hands, state.folded, pay, button)
+    assert result.actions[len(result.actions) - len(tail):] == tail
+    assert sum(is_end_action(a) for a in result.actions) == len(tail)
     return state

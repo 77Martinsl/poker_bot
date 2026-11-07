@@ -59,3 +59,14 @@ class GameInterface:
             )
         self.game_state.validate_action(action)
         return action
+
+    def end_game(self, actions: list[PlayerAction]):
+        """Tells the model the hand is over: the actions since its last
+        turn, shown cards and pot awards included.
+
+        Calls model.end_game(actions, game_state) if the model has one;
+        any other model is not told.
+        """
+        end_game = getattr(self.model, "end_game", None)
+        if callable(end_game):
+            end_game(actions, self.game_state)

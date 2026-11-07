@@ -138,7 +138,8 @@ def play_match(
 
 
 class _Timed:
-    """Passes seed and run through to a model, timing each run call."""
+    """Passes seed and run through to a model, timing each run call, and
+    end_game too when the model has one."""
 
     def __init__(self, model):
         self.model = model
@@ -154,6 +155,15 @@ class _Timed:
         finally:
             seconds = time.perf_counter() - start
             self.max_seconds = max(self.max_seconds, seconds)
+
+    def __getattr__(self, name):
+        # Only runs for names not set on the proxy: end_game is the
+        # model's own, so the proxy has one exactly when the model does.
+        if name == "end_game":
+            end_game = self.model.end_game
+            if callable(end_game):
+                return end_game
+        raise AttributeError(f"{type(self).__name__} has no {name!r}")
 
 
 def _close(models: list) -> Exception | None:

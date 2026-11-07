@@ -53,6 +53,15 @@ python3-pip`.
 4. `run` returns one `PlayerAction` with your own `player_id`. A non-
    `PlayerAction`, someone else's id or an illegal move raises
    `InvalidAction`.
+5. After every hand, `model.end_game(actions, game_state)` is called if
+   your model has it (optional): `actions` is everything since your last
+   turn, ending with the showdown cards and the pot awards (see below), and
+   `game_state` is the final state. Learn from the hand here; there is
+   nothing to clear, since `seed` overwrites the per-hand fields next hand.
+
+The same `Model` object plays hand after hand (in evals, within one seat
+rotation), so whatever it keeps in attributes between hands is what it has
+learned, e.g. per opponent by `game_state.teams`.
 
 ### Errors
 
@@ -77,8 +86,15 @@ The horizon is one hand: a fresh `GameInterface` (and `seed`) every hand.
 - Blinds are posted automatically (default 10/20, stacks 500). Heads-up, the
   button posts the small blind and acts first preflop; after the flop the
   first player after the button acts first.
-- The dealer turns board cards over one at a time (`kind == "reveal_card"`):
-  the 3rd, 4th and 5th card open the flop, turn and river.
+- The dealer turns board cards over one at a time (`kind == "reveal_card"`,
+  `player_id == DEALER`): the 3rd, 4th and 5th card open the flop, turn and
+  river. Check `player_id == DEALER` before treating a `reveal_card` as a
+  board card: players' shown cards use the same kind.
+- When the hand is over, at a showdown every player still in shows both
+  hole cards (`reveal_card` with their own `player_id`), seats from the
+  button's left. A player who wins because everyone else folded shows
+  nothing. Then each player who won chips gets one `win` (`amount` = total
+  chips from every pot, their own uncalled chips included).
 - `raise_to(total)` names your **total bet this street**, not the increment.
   Legal totals are `min_raise_to..max_raise_to` (`raise_range`).
 - A raise must be at least the last full raise (`last_raise`). An all-in
@@ -96,8 +112,10 @@ The horizon is one hand: a fresh `GameInterface` (and `seed`) every hand.
 | `PlayerAction.call(player_id)` | call, or check when `call_amount == 0` |
 | `PlayerAction.raise_to(player_id, total)` | raise to a street total |
 
-Fields: `player_id`, `kind` (`"fold"`, `"call"`, `"raise"`, `"reveal_card"`),
-`amount` (raise total), `card` (for `reveal_card`).
+Fields: `player_id`, `kind` (`"fold"`, `"call"`, `"raise"`, `"reveal_card"`,
+`"win"`), `amount` (raise total, or chips won), `card` (for `reveal_card`).
+Only the engine builds `reveal_card` and `win`; returning them from `run` is
+an illegal move.
 
 `Card` (`card.py`): `Card.parse("AS")`, `card.rank` (`"2".."9"`, `"T"`, `"J"`,
 `"Q"`, `"K"`, `"A"`), `card.suit` (`"C"`, `"D"`, `"H"`, `"S"`), `card.value`
@@ -228,6 +246,11 @@ memory within one (e.g. to learn opponents by `teams`).
 - Mutating `board` or `stacks`: they are tuples; copy with `list(...)`.
 - Treating `raise_to(x)` as "raise by x".
 - Forgetting to store `hand` and `player_id` in `seed`.
+- Treating every `reveal_card` as a board card: players' shown cards at a
+  showdown have their own `player_id`, the board's have `DEALER`.
+- Wiping learned data between hands (e.g. re-running `__init__` in
+  `end_game` or `seed`): keep what you learn in attributes `seed` does not
+  overwrite.
 - Passing card strings where Cards are expected: use `Card.parse("AS")`.
 - Running with the system `python3` instead of `.venv/bin/python`.
 

@@ -152,9 +152,7 @@ def test_R04_board_dealt_in_deck_order():
     result = play_hand(models, deck, [500, 500, 500])
     assert result.board == deck[6:11]
     assert [a.card for a in result.actions
-            if a.kind == "reveal_card"] == deck[6:11]
-    assert all(a.player_id == -1 for a in result.actions
-               if a.kind == "reveal_card")
+            if a.kind == "reveal_card" and a.player_id == -1] == deck[6:11]
 
 
 def test_R05_all_in_run_out_asks_nobody():
@@ -163,9 +161,14 @@ def test_R05_all_in_run_out_asks_nobody():
     models = [Scripted(["allin"]), Scripted(["call"])]
     result = play_hand(models, deck, [500, 500])
     assert len(models[0].runs) == 1 and len(models[1].runs) == 1
+    # seat 0 2C 2D, seat 1 2H 2S; board 3C 3D 3H 3S 4C: a split pot
     assert result.actions == [A.raise_to(0, 500), A.call(1)] + [
         A.reveal_card(c) for c in deck[4:9]
-    ]
+    ] + [A.reveal_card(deck[2], player_id=1),
+         A.reveal_card(deck[3], player_id=1),
+         A.reveal_card(deck[0], player_id=0),
+         A.reveal_card(deck[1], player_id=0),
+         A.win(1, 500), A.win(0, 500)]
 
 
 def test_R06_heads_up_order_with_button_1():
@@ -189,6 +192,13 @@ def test_R07_returned_actions_recorded_in_order():
         + [A.call(2), A.raise_to(0, 40), A.call(2)] + r[3:4]
         + [A.call(2), A.call(0)] + r[4:5]
         + [A.call(2), A.call(0)]
+        # showdown from the left of the button (seat 1 folded): seat 2's
+        # 3C 3D make quads and win the 210 pot
+        + [A.reveal_card(deck[4], player_id=2),
+           A.reveal_card(deck[5], player_id=2),
+           A.reveal_card(deck[0], player_id=0),
+           A.reveal_card(deck[1], player_id=0),
+           A.win(2, 210)]
     )
     assert result.faults == {}
 
@@ -236,7 +246,7 @@ def test_F02_run_raises_when_owing_folds():
     """F-02: if run raises when chips are owed, a fold is applied."""
     models = [Scripted([("raise", 60)]), Scripted([("exc", ValueError("x"))])]
     result = play_hand(models, std_deck(), [500, 500])
-    assert result.actions == [A.raise_to(0, 60), A.fold(1)]
+    assert result.actions == [A.raise_to(0, 60), A.fold(1), A.win(0, 80)]
     assert result.net == [20, -20]
     assert set(result.faults) == {1}
 
@@ -246,7 +256,7 @@ def test_F03_non_PlayerAction_replaced(obj):
     """F-03: a run returning a non-PlayerAction is replaced by check/fold and recorded."""
     models = [Scripted([("raise", 60)]), Scripted([("return", obj)])]
     result = play_hand(models, std_deck(), [500, 500])
-    assert result.actions == [A.raise_to(0, 60), A.fold(1)]
+    assert result.actions == [A.raise_to(0, 60), A.fold(1), A.win(0, 80)]
     assert set(result.faults) == {1}
 
 
@@ -254,7 +264,7 @@ def test_F04_other_seats_id_replaced():
     """F-04: an action with another seat's id is replaced by a check/fold for the faulting seat."""
     models = [Scripted([("raise", 60)]), Scripted([("id", 0)])]
     result = play_hand(models, std_deck(), [500, 500])
-    assert result.actions == [A.raise_to(0, 60), A.fold(1)]
+    assert result.actions == [A.raise_to(0, 60), A.fold(1), A.win(0, 80)]
     assert set(result.faults) == {1}
 
 
@@ -279,7 +289,8 @@ def test_F06_seed_fault_never_asked_gets_replacements():
     good = Scripted()
     result = play_hand([good, bad], deck, [500, 500])
     assert bad.seed_calls == 1 and bad.run_calls == 0
-    mine = [a for a in result.actions if a.player_id == 1]
+    mine = [a for a in result.actions
+            if a.player_id == 1 and a.kind not in ("reveal_card", "win")]
     assert len(mine) == 4 and all(a == A.call(1) for a in mine)
     assert set(result.faults) == {1}
     assert len(result.board) == 5
@@ -290,7 +301,7 @@ def test_F06b_seed_fault_folds_when_owing():
     """F-06: a seed-faulted seat folds when chips are owed."""
     result = play_hand([Scripted([("raise", 60)]), SeedRaiser()], std_deck(),
                        [500, 500])
-    assert result.actions == [A.raise_to(0, 60), A.fold(1)]
+    assert result.actions == [A.raise_to(0, 60), A.fold(1), A.win(0, 80)]
     assert result.net == [20, -20]
 
 
@@ -340,7 +351,7 @@ def test_F11_faults_never_stop_the_hand():
     deck = std_deck()
     models = [Scripted(default=("exc", RuntimeError("x"))) for _ in range(3)]
     result = play_hand(models, deck, [500, 500, 500])
-    assert result.actions == [A.fold(0), A.fold(1)]
+    assert result.actions == [A.fold(0), A.fold(1), A.win(2, 30)]
     assert result.net == [0, -10, 10]
     assert set(result.faults) == {0, 1}
     check_result(result, deck, [500, 500, 500])
@@ -402,11 +413,11 @@ def test_E03_split_pot_odd_chip():
 
 
 def test_E04_fold_before_flop():
-    """E-04/H-02: SB folds preflop heads-up: empty board, no reveals, net [-10, +10]."""
+    """E-04/H-02: SB folds preflop heads-up: empty board, no reveals, a single win of the pot, net [-10, +10]."""
     deck = std_deck()
     result = play_hand([Scripted(["fold"]), Scripted()], deck, [500, 500])
     assert result.board == []
-    assert result.actions == [A.fold(0)]
+    assert result.actions == [A.fold(0), A.win(1, 30)]
     assert result.net == [-10, 10]
     assert result.hands == [deck[0:2], deck[2:4]]
 

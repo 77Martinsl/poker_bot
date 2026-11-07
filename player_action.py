@@ -23,20 +23,22 @@ class PlayerAction:
     is the total you want to have bet this street.
 
     The dealer (player id DEALER) turns over board cards with
-    PlayerAction.reveal_card(card).
+    PlayerAction.reveal_card(card). Once the hand is over, players at a
+    showdown show their hole cards with PlayerAction.reveal_card(card,
+    player_id), and each player paid from the pot gets one
+    PlayerAction.win(player_id, amount).
     """
 
     player_id: int  # who acted; DEALER for the dealer
-    kind: Literal["fold", "call", "raise", "reveal_card"]
-    amount: int = 0  # raise total
+    kind: Literal["fold", "call", "raise", "reveal_card", "win"]
+    amount: int = 0  # raise total, or chips won
     card: Card | None = None  # the card revealed
 
     @model_validator(mode="after")
     def _check_kind(self):
         # Checks the action on its own (not against the game state yet).
+        # The dealer reveals board cards; a player reveals a hole card.
         if self.kind == "reveal_card":
-            if self.player_id != DEALER:
-                raise ValueError("only the dealer reveals cards")
             if self.card is None:
                 raise ValueError("reveal_card needs a Card")
         else:
@@ -44,10 +46,10 @@ class PlayerAction:
                 raise ValueError(f"the dealer cannot {self.kind}")
             if self.card is not None:
                 raise ValueError(f"{self.kind} takes no card")
-        if self.kind == "raise":
+        if self.kind in ("raise", "win"):
             if self.amount <= 0:
                 raise ValueError(
-                    f"raise needs chips > 0, not {self.amount}"
+                    f"{self.kind} needs chips > 0, not {self.amount}"
                 )
         elif self.amount != 0:
             raise ValueError(f"{self.kind} takes no amount")
@@ -68,8 +70,16 @@ class PlayerAction:
         return cls(player_id, "raise", total)
 
     @classmethod
-    def reveal_card(cls, card):
-        return cls(DEALER, "reveal_card", card=card)
+    def win(cls, player_id, amount):
+        """The dealer pays player_id amount chips from the pot, once the
+        hand is over: one win per player paid, all pots together."""
+        return cls(player_id, "win", amount)
+
+    @classmethod
+    def reveal_card(cls, card, player_id=DEALER):
+        """A board card from the dealer, or, once the hand is over, one
+        of player_id's hole cards."""
+        return cls(player_id, "reveal_card", card=card)
 
     # Example, inside your Model.run(actions, game_state):
     #

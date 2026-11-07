@@ -15,7 +15,7 @@ class HandResult:
     actions: list[PlayerAction]  # every action, dealer reveals included
     hands: list[list[Card]]  # hole cards per seat
     board: list[Card]  # the board cards revealed
-    faults: dict[int, str]  # seat -> reason for its first replaced move
+    faults: dict[int, str]  # seat -> reason for its first fault
 
 
 def play_hand(
@@ -34,6 +34,11 @@ def play_hand(
     then the board is dealt in order. The deck is not changed. A model whose
     seed or run raises, or whose move is illegal, has that move replaced by
     a check (nothing owed) or a fold, and the reason goes in faults.
+
+    Once the hand is over, the seats left at a showdown show their hole
+    cards and each seat paid from the pot gets one win, all applied like
+    any other action. Then every seat whose seed did not raise is told,
+    with end_game; a raise there is also a fault.
 
     A seat with no chips is still dealt in, so do not seat busted players.
     """
@@ -80,6 +85,30 @@ def play_hand(
 
     contributed = [stacks[p] - state.stacks[p] for p in range(count)]
     won = payouts(contributed, state.folded, hands, state.board, button)
+    # Seat order from the button's left, as for odd chips. Nobody shows
+    # cards when everyone else folded.
+    order = [(button + step) % count for step in range(1, count + 1)]
+    shown = [p for p in order if not state.folded[p]]
+    if len(shown) == 1:
+        shown = []
+    endings = [
+        PlayerAction.reveal_card(card, p) for p in shown for card in hands[p]
+    ]
+    endings += [PlayerAction.win(p, won[p]) for p in order if won[p] > 0]
+    for action in endings:
+        state.process_action(action)
+        actions.append(action)
+        for pending in unseen:
+            pending.append(action)
+    for p in range(count):
+        pending, unseen[p] = unseen[p], []
+        if seats[p] is None:
+            continue
+        try:
+            seats[p].end_game(pending)
+        except Exception as error:
+            if p not in faults:
+                faults[p] = _describe("end_game", error)
     return HandResult(
         net=[won[p] - contributed[p] for p in range(count)],
         actions=actions,

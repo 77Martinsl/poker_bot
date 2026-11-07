@@ -283,10 +283,16 @@ class GameState:
 
         Betting actions are validated first and raise InvalidAction if
         illegal, so no copy, the engine's included, can apply a bad move.
+        Once the hand is over, a player's reveal_card (a shown hole card)
+        and win (chips paid from the pot) end it.
         """
-        # The dealer's only action is reveal_card; anyone else is betting.
+        # The dealer's only action is reveal_card; a player's reveal_card
+        # or win ends the hand; anything else is betting.
         if action.player_id == DEALER:
             self.deal_card(action.card)
+            return
+        if action.kind in ("reveal_card", "win"):
+            self._settle(action)
             return
         self.validate_action(action)
         # Validated, so player_id is to_act and the to-act queries are theirs.
@@ -326,6 +332,26 @@ class GameState:
         # Only the card that completes a street moves the hand on.
         if len(self.board) in BOARD_SIZES:
             self._next_street(BOARD_SIZES[len(self.board)])
+
+    def _settle(self, action: PlayerAction):
+        """A player's reveal_card or win: only process_action calls this.
+
+        Legal once the hand is over, for a player who has not folded. A
+        reveal_card changes nothing (hole cards never live here); a win
+        adds its chips to the player's stack, and pot stays every chip put
+        in this hand. The engine is trusted to pay out the pot exactly.
+        """
+        if not self.is_hand_over:
+            raise InvalidAction(
+                f"{action.kind!r} only comes once the hand is over"
+            )
+        player_id = action.player_id
+        if not 0 <= player_id < self.num_players:
+            raise InvalidAction(f"no player {player_id}")
+        if self.folded[player_id]:
+            raise InvalidAction(f"player {player_id} has folded")
+        if action.kind == "win":
+            self.stacks[player_id] += action.amount
 
     def _next_street(self, street: Street):
         """Opens a street: only deal_card calls this."""

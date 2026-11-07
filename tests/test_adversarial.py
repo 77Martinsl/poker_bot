@@ -12,7 +12,7 @@ from poker_test_helpers import (
     Scripted, check_result, deck_from, std_deck,
 )
 
-KINDS = {"fold", "call", "raise", "reveal_card"}
+KINDS = {"fold", "call", "raise", "reveal_card", "win"}
 TIMEOUT = 10
 
 
@@ -48,7 +48,9 @@ def assert_clean(result, deck, stacks, **kw):
         assert type(a) is A
         assert a.kind in KINDS
         if a.kind == "reveal_card":
-            assert a.player_id == DEALER
+            assert a.card is not None and a.player_id >= DEALER
+        elif a.kind == "win":
+            assert a.player_id >= 0 and a.card is None and a.amount >= 1
         else:
             assert a.player_id >= 0 and a.card is None
     check_result(result, deck, stacks, **kw)

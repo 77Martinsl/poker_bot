@@ -55,29 +55,30 @@ def test_P05_pending_lists_match_history(args):
 
 @given(hand_args())
 def test_P06_replay_reproduces_net(args):
-    """P-06: replaying HandResult.actions on a fresh GameState ends the hand exactly, net equals payouts minus contributions, sums to 0 and never loses more than a stack."""
+    """P-06: replaying HandResult.actions on a fresh GameState ends the hand (then only reveals and wins), ends with stacks == start + net, net equals payouts minus contributions, sums to 0 and never loses more than a stack."""
     _, result = run(args)
     stacks = args["stacks"]
-    state, _ = replay(result, stacks, args["button"], args["small_blind"],
-                      args["big_blind"], args["teams"])
-    contributed = [stacks[i] - state.stacks[i] for i in range(len(stacks))]
+    state, _, contributed = replay(result, stacks, args["button"],
+                                   args["small_blind"], args["big_blind"],
+                                   args["teams"])
     pay = payouts(contributed, list(state.folded), result.hands, result.board,
                   args["button"])
     assert result.net == [p - c for p, c in zip(pay, contributed)]
     assert sum(result.net) == 0
     assert all(net >= -stack for net, stack in zip(result.net, stacks))
+    assert list(state.stacks) == [s + n for s, n in zip(stacks, result.net)]
 
 
 @given(hand_args())
 def test_P07_board_and_hands_from_deck(args):
-    """P-07/H-01: hands[i] = deck[2i:2i+2]; board = deck[2n:...] = the reveal_card cards; 5 cards if >1 seat is unfolded at the end."""
+    """P-07/H-01: hands[i] = deck[2i:2i+2]; board = deck[2n:...] = the dealer's reveal_card cards; 5 cards if >1 seat is unfolded at the end."""
     _, result = run(args)
     deck, n = args["deck"], len(args["stacks"])
     assert result.hands == [deck[2 * i:2 * i + 2] for i in range(n)]
     assert result.board == deck[2 * n:2 * n + len(result.board)]
     assert [a.card for a in result.actions
-            if a.kind == "reveal_card"] == result.board
-    state, _ = replay(result, args["stacks"], args["button"],
+            if a.kind == "reveal_card" and a.player_id == -1] == result.board
+    state, _, _ = replay(result, args["stacks"], args["button"],
                       args["small_blind"], args["big_blind"], args["teams"])
     if len(state.players_in_hand) > 1:
         assert len(result.board) == 5
@@ -87,11 +88,11 @@ def test_P07_board_and_hands_from_deck(args):
 def test_P08_faults_and_replacements(args):
     """P-08: faults keys are exactly the faulting seats; a faulting turn becomes call if nothing owed, else fold; clean moves are kept."""
     models, result = run(args)
-    _, before = replay(result, args["stacks"], args["button"],
+    _, before, _ = replay(result, args["stacks"], args["button"],
                        args["small_blind"], args["big_blind"], args["teams"])
     turn = [0] * len(models)
     for action, (to_act, owed) in zip(result.actions, before):
-        if action.kind == "reveal_card":
+        if action.kind in ("reveal_card", "win"):
             continue
         seat = action.player_id
         assert seat == to_act
