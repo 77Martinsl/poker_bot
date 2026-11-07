@@ -236,11 +236,12 @@ while True:
 '''
 
 LOGGER = r'''
-import os
+import subprocess
 import sys
 with open(sys.argv[1], "a") as f:
     f.write("\t".join(sys.argv[2:]) + "\n")
-os.execvp(sys.argv[2], sys.argv[2:])
+# (os.execvp splits arguments at spaces on Windows.)
+sys.exit(subprocess.call(sys.argv[2:]))
 '''
 
 

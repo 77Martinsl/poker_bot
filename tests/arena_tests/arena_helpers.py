@@ -325,6 +325,18 @@ def hand_tuples(log):
 # -- process helpers -----------------------------------------------------------
 
 def alive(pid):
+    if os.name == "nt":
+        # os.kill(pid, 0) would terminate the process on Windows.
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # QUERY_LIMITED
+        if not handle:
+            return False
+        code = ctypes.c_ulong()
+        kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+        kernel32.CloseHandle(handle)
+        return code.value == 259  # STILL_ACTIVE
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

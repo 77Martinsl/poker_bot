@@ -25,6 +25,12 @@ def main(argv: list[str] | None = None):
     # 1, and sys.stdin and sys.stdout, no longer reach the parent, so
     # nothing the model reads or prints touches the protocol.
     requests, replies = os.dup(0), os.dup(1)
+    if sys.platform == "win32":
+        # Frames are raw bytes: no newline translation, no end-of-file at ^Z.
+        import msvcrt
+
+        msvcrt.setmode(requests, os.O_BINARY)
+        msvcrt.setmode(replies, os.O_BINARY)
     devnull = os.open(os.devnull, os.O_RDONLY)
     os.dup2(devnull, 0)
     os.close(devnull)

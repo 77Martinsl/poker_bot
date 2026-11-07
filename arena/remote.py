@@ -2,11 +2,12 @@ import base64
 import json
 import os
 import pickle
-import selectors
+import queue
 import signal
 import struct
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Sequence
 
@@ -56,6 +57,8 @@ class RemoteModel:
         self.memory_mb = memory_mb
         self._process = None  # started by the first call
         self._dead = False  # set for good once the worker is gone
+        self._replies = None  # frames the reader thread has read
+        self._limit = [MAX_REPLY]  # largest reply the reader accepts
 
     def __reduce__(self):
         raise TypeError("a RemoteModel cannot be pickled")
@@ -106,7 +109,7 @@ class RemoteModel:
                 return
             try:
                 frame = _frame(pickle.dumps(("close", ())))
-                _write_all(process.stdin.fileno(), frame, time.monotonic() + 1)
+                _write(process, frame, time.monotonic() + 1)
                 process.wait(1)
             except Exception:
                 pass
@@ -134,12 +137,19 @@ class RemoteModel:
             if self._process is None:
                 self._start()
             frame = _frame(pickle.dumps((command, args)))
-            _write_all(self._process.stdin.fileno(), frame, deadline)
-            out = self._process.stdout.fileno()
-            (size,) = struct.unpack(">I", _read_exact(out, 4, deadline))
-            if size > limit:
-                raise RemoteError(f"a reply of {size} bytes is too big")
-            payload = _read_exact(out, size, deadline)
+            self._limit[0] = limit
+            _write(self._process, frame, deadline)
+            try:
+                kind, value = self._replies.get(
+                    timeout=max(0.0, deadline - time.monotonic())
+                )
+            except queue.Empty:
+                raise TimeoutError from None
+            if kind == "eof":
+                raise RemoteError("the worker exited")
+            if kind == "big":
+                raise RemoteError(f"a reply of {value} bytes is too big")
+            payload = value
         except TimeoutError:
             self._kill()
             raise TimeoutError(
@@ -173,18 +183,29 @@ class RemoteModel:
         return reply[key]
 
     def _start(self):
+        # Its own process group (session on POSIX), so a kill also reaches
+        # what the launcher started.
+        if os.name == "nt":
+            group = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP
+                     | subprocess.CREATE_NO_WINDOW}
+        else:
+            group = {"start_new_session": True}
         self._process = subprocess.Popen(
             [*self.launcher, sys.executable, "-m", "arena.worker",
              self.pkl_path, str(self.memory_mb)],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             cwd=_ROOT,
-            # Its own process group, so a kill also reaches what the
-            # launcher started.
-            start_new_session=True,
+            **group,
         )
-        # Writes never block: _write_all waits with a deadline instead.
-        os.set_blocking(self._process.stdin.fileno(), False)
+        # A thread reads the replies, so waiting for one can time out on
+        # every platform (select does not work on pipes on Windows).
+        self._replies = queue.Queue()
+        threading.Thread(
+            target=_pump,
+            args=(self._process.stdout, self._replies, self._limit),
+            daemon=True,
+        ).start()
 
     def _kill(self):
         """Ends the worker for good, if it ever started."""
@@ -193,10 +214,7 @@ class RemoteModel:
         if process is None:
             return
         if process.poll() is None:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except OSError:
-                process.kill()
+            _kill_tree(process)
         process.wait()
         for pipe in (process.stdin, process.stdout):
             try:
@@ -214,36 +232,63 @@ def _frame(payload: bytes) -> bytes:
     return struct.pack(">I", len(payload)) + payload
 
 
-def _write_all(fd: int, data: bytes, deadline: float):
-    """All of data to fd, which must be non-blocking."""
-    view = memoryview(data)
-    while view:
-        _wait(fd, deadline, selectors.EVENT_WRITE)
+def _write(process, data: bytes, deadline: float):
+    """All of data to the worker's stdin, or TimeoutError past the deadline.
+
+    The write runs in a thread: a worker that is not reading yet (still
+    starting up) would otherwise block the caller past its deadline.
+    """
+    errors: list[BaseException] = []
+
+    def send():
         try:
-            view = view[os.write(fd, view):]
-        except BlockingIOError:
-            pass
+            process.stdin.write(data)
+            process.stdin.flush()
+        except (OSError, ValueError) as error:  # a broken or closed pipe
+            errors.append(error)
+
+    writer = threading.Thread(target=send, daemon=True)
+    writer.start()
+    writer.join(max(0.0, deadline - time.monotonic()))
+    if writer.is_alive():
+        raise TimeoutError
+    if errors:
+        raise OSError(str(errors[0]))
 
 
-def _read_exact(fd: int, size: int, deadline: float) -> bytes:
-    """Exactly size bytes from fd; RemoteError at end of file."""
-    chunks = []
-    while size:
-        _wait(fd, deadline)
-        chunk = os.read(fd, min(size, 1 << 20))
-        if not chunk:
-            raise RemoteError("the worker exited")
-        chunks.append(chunk)
-        size -= len(chunk)
-    return b"".join(chunks)
-
-
-def _wait(fd: int, deadline: float, event=selectors.EVENT_READ):
-    """Waits until fd is ready; TimeoutError past the deadline."""
-    remaining = deadline - time.monotonic()
-    if remaining > 0:
-        with selectors.DefaultSelector() as selector:
-            selector.register(fd, event)
-            if selector.select(remaining):
+def _pump(stream, replies: "queue.Queue", limit: list):
+    """Reads reply frames from the worker until it ends. Puts ("ok",
+    payload), then at the end ("eof", None), or ("big", size) for a reply
+    over limit[0] bytes, which is never read."""
+    try:
+        while True:
+            head = stream.read(4)
+            if len(head) < 4:
+                break
+            (size,) = struct.unpack(">I", head)
+            if size > limit[0]:
+                replies.put(("big", size))
                 return
-    raise TimeoutError
+            payload = stream.read(size)
+            if len(payload) < size:
+                break
+            replies.put(("ok", payload))
+    except (OSError, ValueError):
+        pass
+    replies.put(("eof", None))
+
+
+def _kill_tree(process):
+    """Kills the worker and whatever the launcher started with it."""
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                capture_output=True,
+            )
+        else:
+            os.killpg(process.pid, signal.SIGKILL)
+    except OSError:
+        pass
+    if process.poll() is None:
+        process.kill()
