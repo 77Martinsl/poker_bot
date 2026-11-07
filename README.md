@@ -211,37 +211,8 @@ the interval does not include 0, so add `--deals` to narrow it.
 
 ## 5. Submit
 
-Your bot is submitted as a **pickle plus the code it came from**, so the
-organisers can read the code before anything runs. From the repo root:
-
-```sh
-.venv/bin/python -m submit --team myteam
-```
-
-This does `pickle.dump(Model(), ...)` into `myteam.pkl` and then checks it
-the way the organisers will: it lists the files you must upload, shows
-anything the code review will flag, and plays your model from a clean copy of
-just those files against the dummy bots. Fix anything it reports, then upload
-**every file it lists** (`myteam.pkl` and your `.py` files) in the submission
-form. The form opens at 16:00 and its link appears then on the event
-website (until then submissions are closed); the deadline is 18:00. Submit
-again before the deadline if
-you improve it: the newest upload that works is the one that plays.
-
-What the review looks for:
-
-- **The pickle** may only name your own modules and plain data (numbers,
-  lists, dicts, sets, numpy arrays, `Card`, `PlayerAction`). A pickle that
-  names anything else, such as `os.system`, is refused and never run.
-- **Your `.py` files** are read for imports such as `os`, `subprocess` or
-  `socket`, for `eval`/`exec`/`open`, and for reaching into the engine's
-  internals (`_state`, `__globals__`, `_getframe`). A flagged file waits for
-  an organiser to read it, so keep your code plain: no network, no files, no
-  tricks.
-- Keep your files flat next to `model.py` (no folders), named with letters,
-  digits and `_`, and not like a standard library module (`random.py`).
-- Put weights and data inside the model object (load them in `__init__`);
-  files on disk are not available when your bot plays.
+Submit your bot by filling in this Google form:
+https://docs.google.com/forms/d/e/1FAIpQLSe1MQUfkZcGnGBpcgON4J7HumKMBsOekWnr0ZvLcytxA8R5gQ/viewform?usp=dialog
 
 ## For the organiser
 

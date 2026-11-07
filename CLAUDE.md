@@ -117,15 +117,7 @@ rebuilt from its pickle for each rotation and keeps its memory within one
 
 ### Submitting
 
-`.venv/bin/python -m submit --team myteam` (Windows: `.venv\Scripts\python`)
-pickles `Model()` with plain `pickle.dump` to `myteam.pkl`, lists the files to
-upload (the `.pkl` and the `.py` files it needs; the pickle stores the class by
-reference, so the code must come with it), shows what the organisers' code
-review will flag, and plays the model from a clean copy of just those files.
-Teams upload every file it lists in the Google Form; the organisers read the
-code before anything runs. A pickle may only name the team's own modules and
-plain data; a team `.py` file may not be named like a standard library or
-arena module (`random.py`, `engine.py`), nor sit in a folder.
+Through the Google form linked in README.md, section "5. Submit".
 
 ### Common mistakes
 
