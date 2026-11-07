@@ -1,34 +1,16 @@
 import { ciPlot, axisHeader, describeScore, scoreAxisMax } from '../charts.js';
 import { h } from '../dom.js';
-import { fmtBB, fmtPlain, plural } from '../format.js';
-
-export function kindBadge(kind, group = null) {
-  if (kind === 'group') return h('span', { class: 'badge' }, group ? `GROUP ${group}` : 'ROUND 1');
-  return kind === 'final'
-    ? h('span', { class: 'badge final' }, 'FINAL')
-    : h('span', { class: 'badge prov' }, 'PROVISIONAL · ladder');
-}
-
-export function emptyBoard(kind) {
-  return h(
-    'div',
-    { class: 'empty card' },
-    kind === 'final'
-      ? 'The final has not produced results yet.'
-      : 'No bots have been accepted yet.',
-  );
-}
+import { fmtBB, fmtPlain } from '../format.js';
 
 const DEFAULT_CAPTION = 'Ranking by mean big blinds won per 100 hands, with 95% interval';
 
 /**
- * The ranking: score, interval plot, record and faults. `limit` shows only
- * the top N (used by TV mode). `marks` (team name -> text) adds a badge after
- * a team's name, for example "Qualified" in a tournament group; `caption` is
+ * The ranking: score, interval plot, record and faults. `marks` (team name ->
+ * text) adds a badge after a team's name, for example "Champion"; `caption` is
  * the table's screen-reader description.
  */
-export function leaderboardTable(board, { limit = null, marks = null, caption = DEFAULT_CAPTION } = {}) {
-  const teams = limit ? board.teams.slice(0, limit) : board.teams;
+export function leaderboardTable(board, { marks = null, caption = DEFAULT_CAPTION } = {}) {
+  const teams = board.teams;
   const max = scoreAxisMax(board.teams);
   const body = teams.map((team) => {
     const ranked = team.score != null;
@@ -96,14 +78,9 @@ export function leaderboardTable(board, { limit = null, marks = null, caption = 
   );
 }
 
-/** Text, not colour alone: "✓ Qualified" or "★ Champion". */
+/** Text, not colour alone: "★ Champion". */
 function markBadge(text) {
-  return h(
-    'span',
-    { class: text === 'Champion' ? 'badge final mark' : 'badge ok mark' },
-    h('span', { 'aria-hidden': 'true' }, text === 'Champion' ? '★' : '✓'),
-    text,
-  );
+  return h('span', { class: 'badge final mark' }, h('span', { 'aria-hidden': 'true' }, '★'), text);
 }
 
 function faultCell(team) {
@@ -121,41 +98,4 @@ function faultCell(team) {
     );
   }
   return h('span', {}, ...parts.flatMap((p, i) => (i ? [' ', p] : [p])));
-}
-
-export function leaderboardView(ctx) {
-  const board = ctx.data.boards[ctx.kind];
-  const page = h('div', { class: 'page' });
-  const head = h('header', {}, h('h1', {}, 'Leaderboard'), kindBadge(ctx.kind));
-  page.appendChild(head);
-  if (!board || !board.teams.length) {
-    page.appendChild(emptyBoard(ctx.kind));
-    return { el: page, title: 'Leaderboard' };
-  }
-  head.appendChild(
-    h(
-      'span',
-      { class: 'muted small' },
-      `${board.pairs_done} of ${plural(board.pairs_total, 'pairing')} played` +
-        (board.cycle ? ` · cycle ${board.cycle}: every pairing is replayed each cycle and the results are added together` : ''),
-    ),
-  );
-  if (ctx.kind === 'ladder' && ctx.data.boards.final) {
-    page.appendChild(
-      h('p', { class: 'note' }, 'The final has been played. ', h('a', { href: '#/?kind=final' }, 'See the final result'), '.'),
-    );
-  }
-  page.appendChild(h('div', { class: 'card' }, leaderboardTable(board)));
-  page.appendChild(
-    h(
-      'p',
-      { class: 'note' },
-      'Score is the mean number of big blinds won per 100 hands against every opponent, ' +
-        'each opponent counting equally. Every deal is played twice with the seats ' +
-        'swapped, which removes most card luck. The bar shows the 95% interval: if ' +
-        'it crosses zero or touches the next team’s, the order is not certain. ' +
-        '≈ marks a team that cannot be separated from the one below.',
-    ),
-  );
-  return { el: page, title: 'Leaderboard' };
 }

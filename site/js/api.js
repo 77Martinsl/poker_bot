@@ -2,17 +2,16 @@
 // poll; the bigger files are fetched only when its fingerprint changes, and
 // are keyed by it so a CDN or browser can cache them between changes.
 
-import { isTournament, normalizeTeams, normalizeTournament, tournamentFiles } from './tournament-core.js';
+import { normalizeTeams, normalizeTournament, tournamentFiles } from './tournament-core.js';
 import { normalizeEvent, normalizeSubmissions } from './event-core.js';
 
 export const data = {
   manifest: null,
-  tournament: null, // tournament.json, normalised; null in the ladder format
+  tournament: null, // tournament.json, normalised
   submissions: null, // manifest.submissions, normalised
-  boards: {},
+  event: null, // event.json (the Home page text), normalised
   pairings: {},
   teams: [],
-  registrations: [],
   lastOk: 0, // wall-clock ms of the last successful poll
   error: null,
 };
@@ -56,61 +55,29 @@ export async function refresh() {
 }
 
 /**
- * The tournament format: tournament.json always, and pairings / the final
- * board only for the rounds the manifest says are published. Nothing else is
- * requested, so a not-yet-played round costs no 404s.
+ * tournament.json always, and the pairings only when the manifest says they
+ * are published. Nothing else is requested, so a not-yet-played round costs no
+ * 404s. The group's ranked table travels inside tournament.json.
  */
-async function loadTournament(manifest) {
+async function loadAll(manifest) {
   const bust = manifest.fingerprint;
   const files = tournamentFiles(manifest);
   const pairingKinds = Object.keys(files.pairings);
-  const boardKinds = Object.keys(files.boards);
   const [tournament, teams, event, ...rest] = await Promise.all([
     getJSON(files.tournament, bust),
     getOptionalJSON(files.teams, bust),
     manifest.has_event ? getOptionalJSON('data/event.json', bust) : null,
     ...pairingKinds.map((kind) => getOptionalJSON(files.pairings[kind], bust)),
-    ...boardKinds.map((kind) => getOptionalJSON(files.boards[kind], bust)),
   ]);
   data.pairings = {};
-  data.boards = {};
   pairingKinds.forEach((kind, index) => {
     data.pairings[kind] = rest[index] || [];
-  });
-  boardKinds.forEach((kind, index) => {
-    const board = rest[pairingKinds.length + index];
-    if (board) data.boards[kind] = board;
   });
   data.tournament = normalizeTournament(tournament);
   data.submissions = normalizeSubmissions(manifest.submissions);
   data.tournament.submissions = data.submissions;
   data.event = normalizeEvent(event);
   data.teams = normalizeTeams(teams && teams.teams);
-  data.registrations = [];
-  data.manifest = manifest;
-  replayCache.clear();
-}
-
-async function loadAll(manifest) {
-  if (isTournament(manifest)) return loadTournament(manifest);
-  data.tournament = null;
-  const bust = manifest.fingerprint;
-  const kinds = manifest.kinds || ['ladder'];
-  const [teams, ...rest] = await Promise.all([
-    getJSON('data/teams.json', bust),
-    ...kinds.flatMap((kind) => [
-      getJSON(`data/leaderboard-${kind}.json`, bust),
-      getJSON(`data/pairings-${kind}.json`, bust),
-    ]),
-  ]);
-  data.boards = {};
-  data.pairings = {};
-  kinds.forEach((kind, index) => {
-    data.boards[kind] = rest[index * 2];
-    data.pairings[kind] = rest[index * 2 + 1];
-  });
-  data.teams = teams.teams;
-  data.registrations = teams.registrations || [];
   data.manifest = manifest;
   replayCache.clear(); // replay files may have been rebuilt
 }
@@ -142,7 +109,7 @@ export async function loadReplay(path) {
   }
 }
 
-/** All pairings across kinds, newest first. */
+/** All pairings, newest first. */
 export function allPairings() {
   return Object.values(data.pairings)
     .flat()
@@ -155,9 +122,4 @@ export function findPairing(id) {
 
 export function teamEntry(name) {
   return data.teams.find((t) => t.team === name) || null;
-}
-
-export function boardRow(kind, name) {
-  const board = data.boards[kind];
-  return board ? board.teams.find((t) => t.team === name) || null : null;
 }

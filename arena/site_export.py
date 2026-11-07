@@ -75,6 +75,7 @@ def load_event(path: str) -> dict:
                 "detail": text(row.get("detail")),
             })
     repo = text(raw.get("repo"), 200)
+    whatsapp = text(raw.get("whatsapp"), 200)
     event = {
         "tagline": text(raw.get("tagline"), 200),
         "intro": texts(raw.get("intro")),
@@ -83,6 +84,7 @@ def load_event(path: str) -> dict:
         "rules": texts(raw.get("rules")),
         "contact": text(raw.get("contact")),
         "repo": repo if repo.startswith("https://") else "",
+        "whatsapp": whatsapp if whatsapp.startswith("https://") else "",
     }
     window = raw.get("submissions")
     if isinstance(window, dict):
@@ -150,6 +152,8 @@ def _sync_assets(out: str) -> bool:
     changed = False
     for current, _, files in os.walk(SITE_DIR):
         for name in files:
+            if name == "package.json":  # dev-only (lets Node import the modules)
+                continue
             source = os.path.join(current, name)
             target = os.path.join(out, os.path.relpath(source, SITE_DIR))
             with open(source, "rb") as file:

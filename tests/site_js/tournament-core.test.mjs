@@ -3,21 +3,13 @@ import assert from 'node:assert/strict';
 import {
   NOT_YET,
   PHASE_ORDER,
-  advanceText,
   entryStatus,
   normalizeTeams,
-  registerFormOpen,
   statusCounts,
-  undrawnTeams,
-  finalMarks,
-  finalsNote,
-  finalsStage,
   groupMarks,
   groupsRevealed,
-  isTournament,
   normalizeTournament,
   phaseInfo,
-  qualifiedInGroup,
   revealedBoards,
   roundOneNote,
   teamStanding,
@@ -28,59 +20,31 @@ import {
 const row = (team, rank, score = 0.1) => ({ team, rank, score, ci95: 0.2, wins: 1, draws: 0, losses: 0 });
 const board = (...names) => ({ kind: 'group', teams: names.map((n, i) => row(n, i + 1, 1 - i / 10)), matrix: {} });
 
-/** The shape the exporter writes for each phase (20 teams in the real data; 5 here). */
+/** The shape the exporter writes for each phase (one group, every team in it). */
 function sample(phase) {
-  const drawn = [
-    { name: 'A', teams: ['a1', 'a2', 'a3'] },
-    { name: 'B', teams: ['b1', 'b2'] },
-  ];
-  const groups = (withBoards) =>
-    drawn.map((g) => ({
-      ...g,
-      board: withBoards ? board(...[...g.teams].reverse()) : null,
-    }));
-  const base = { phase, advance: 2, groups: [], qualified: [], finals: null, champion: null };
+  const teams = ['a1', 'a2', 'a3'];
+  const base = { phase, groups: [], champion: null };
   switch (phase) {
     case 'registration':
       return base;
-    case 'drawn':
     case 'groups':
-      return { ...base, groups: groups(false) };
-    case 'between':
-      return { ...base, groups: groups(true), qualified: ['a3', 'a2', 'b2', 'b1'] };
-    case 'finals':
-      return {
-        ...base,
-        groups: groups(true),
-        qualified: ['a3', 'a2', 'b2', 'b1'],
-        finals: { teams: ['a3', 'a2', 'b2', 'b1'], board: null },
-      };
+      return { ...base, groups: [{ name: 'A', teams, board: null }] };
     default:
-      return {
-        ...base,
-        groups: groups(true),
-        qualified: ['a3', 'a2', 'b2', 'b1'],
-        finals: { teams: ['a3', 'a2', 'b2', 'b1'], board: board('b2', 'a3', 'a2', 'b1') },
-        champion: 'b2',
-      };
+      return { ...base, groups: [{ name: 'A', teams, board: board('a3', 'a2', 'a1') }], champion: 'a3' };
   }
 }
 
 test('every phase has a plain-words banner', () => {
-  assert.deepEqual(PHASE_ORDER, ['registration', 'drawn', 'groups', 'between', 'finals', 'done']);
+  assert.deepEqual(PHASE_ORDER, ['registration', 'groups', 'done']);
   const texts = PHASE_ORDER.map((p) => phaseInfo(p));
   for (const info of texts) {
     assert.ok(info.known);
     assert.ok(info.label && info.text.endsWith('.'), info.phase);
   }
   assert.match(phaseInfo('registration').text, /handing in their bots/);
-  assert.match(phaseInfo('drawn').text, /drawn/);
-  assert.match(phaseInfo('drawn').text, /not started/);
   assert.match(phaseInfo('groups').text, /Round 1.*in progress.*when the round ends/);
-  assert.match(phaseInfo('between').text, /Round 1 is complete.*finals are about to start/);
-  assert.match(phaseInfo('finals').text, /finals are in progress.*when the round ends/);
   assert.match(phaseInfo('done').text, /finished/);
-  assert.equal(new Set(texts.map((i) => i.text)).size, 6);
+  assert.equal(new Set(texts.map((i) => i.text)).size, 3);
 });
 
 test('an unknown or missing phase still reads sensibly', () => {
@@ -91,33 +55,19 @@ test('an unknown or missing phase still reads sensibly', () => {
   }
 });
 
-test('mode detection follows the manifest only', () => {
-  assert.equal(isTournament({ mode: 'tournament' }), true);
-  assert.equal(isTournament({ mode: 'ladder' }), false);
-  assert.equal(isTournament({}), false); // a legacy manifest has no mode
-  assert.equal(isTournament(null), false);
-});
-
 test('normalizing tolerates missing and null parts', () => {
-  for (const raw of [null, undefined, {}, { groups: null, finals: null }, 'x']) {
+  for (const raw of [null, undefined, {}, { groups: null }, 'x']) {
     const t = normalizeTournament(raw);
     assert.deepEqual(t.groups, []);
-    assert.deepEqual(t.qualified, []);
-    assert.equal(t.finals, null);
     assert.equal(t.champion, null);
-    assert.equal(t.advance, 2);
+    assert.equal(t.phase, '');
   }
   const t = normalizeTournament({
-    advance: 1,
     groups: [{ name: 'A', teams: null, board: { teams: 'nope' } }, { name: 'B', teams: ['x'], board: null }],
-    qualified: null,
-    finals: { teams: ['x'], board: null },
+    champion: 'x',
   });
-  assert.equal(t.advance, 1);
   assert.deepEqual(t.groups[0], { name: 'A', teams: [], board: null });
-  assert.deepEqual(t.finals, { teams: ['x'], board: null });
-  assert.equal(normalizeTournament({ advance: 0 }).advance, 2);
-  assert.equal(normalizeTournament({ advance: 'x' }).advance, 2);
+  assert.equal(t.champion, 'x');
 });
 
 test('only files the manifest lists are requested', () => {
@@ -125,136 +75,43 @@ test('only files the manifest lists are requested', () => {
   assert.equal(none.tournament, 'data/tournament.json');
   assert.equal(none.teams, 'data/teams.json');
   assert.deepEqual(none.pairings, {});
-  assert.deepEqual(none.boards, {});
 
-  const groupsOnly = tournamentFiles({ kinds: ['group'] });
-  assert.deepEqual(groupsOnly.pairings, { group: 'data/pairings-group.json' });
-  assert.deepEqual(groupsOnly.boards, {}); // there is no leaderboard-group.json
-
-  const both = tournamentFiles({ kinds: ['group', 'final'] });
-  assert.deepEqual(both.pairings, {
-    group: 'data/pairings-group.json',
-    final: 'data/pairings-final.json',
-  });
-  assert.deepEqual(both.boards, { final: 'data/leaderboard-final.json' });
+  // The group table travels inside tournament.json: there is no leaderboard file.
+  assert.deepEqual(tournamentFiles({ kinds: ['group'] }).pairings, { group: 'data/pairings-group.json' });
 
   // A manifest with no kinds field, or an unknown kind, requests nothing extra.
   assert.deepEqual(tournamentFiles({}).pairings, {});
-  assert.deepEqual(tournamentFiles({ kinds: ['ladder'] }).pairings, {});
+  assert.deepEqual(tournamentFiles({ kinds: ['ladder', 'final'] }).pairings, {});
 });
 
 test('before the draw there is nothing to show', () => {
   const t = normalizeTournament(sample('registration'));
   assert.equal(groupsRevealed(t), false);
   assert.deepEqual(revealedBoards(t), []);
-  assert.equal(finalsStage(t), 'unknown');
-  assert.match(roundOneNote(t), /drawn when submissions close/);
+  assert.match(roundOneNote(t), /draw is made when submissions close.*Everyone plays everyone in one round/);
 });
 
-test('drawn and groups phases show the draw but no results', () => {
-  for (const phase of ['drawn', 'groups']) {
-    const t = normalizeTournament(sample(phase));
-    assert.equal(groupsRevealed(t), false, phase);
-    assert.deepEqual(revealedBoards(t), [], phase);
-    assert.ok(roundOneNote(t).includes(NOT_YET), phase);
-    assert.equal(finalsStage(t), 'unknown', phase);
-    assert.equal(qualifiedInGroup(t.groups[0], t).size, 0, phase);
-    assert.equal(groupMarks(t.groups[0], t).size, 0, phase);
-    assert.equal(finalMarks(t).size, 0, phase);
-  }
-  assert.match(roundOneNote(normalizeTournament(sample('drawn'))), /has not started/);
-  assert.match(roundOneNote(normalizeTournament(sample('groups'))), /in progress/);
+test('while the round is played the draw shows but no results', () => {
+  const t = normalizeTournament(sample('groups'));
+  assert.equal(groupsRevealed(t), false);
+  assert.deepEqual(revealedBoards(t), []);
+  assert.ok(roundOneNote(t).includes(NOT_YET));
+  assert.match(roundOneNote(t), /in progress/);
+  assert.equal(groupMarks(t.groups[0], t).size, 0);
+  assert.equal(roundOneNote(normalizeTournament({ phase: 'weird' })), NOT_YET);
 });
 
-test('between rounds the groups are revealed and the finalists are known', () => {
-  const t = normalizeTournament(sample('between'));
+test('when done the table and the champion are there', () => {
+  const t = normalizeTournament(sample('done'));
   assert.equal(groupsRevealed(t), true);
   assert.equal(roundOneNote(t), null);
-  assert.deepEqual(revealedBoards(t).map((b) => b.label), ['Group A', 'Group B']);
-  assert.equal(finalsStage(t), 'known');
-  assert.match(finalsNote(t), /best 2 of each group.*about to start/);
-  assert.ok(finalsNote(t).includes(NOT_YET));
+  assert.deepEqual(revealedBoards(t).map((b) => [b.id, b.label]), [['A', 'Group A']]);
+  assert.deepEqual([...groupMarks(t.groups[0], t)], [['a3', 'Champion']]);
 });
 
-test('finals in progress show the finalists but no table', () => {
-  const t = normalizeTournament(sample('finals'));
-  assert.equal(finalsStage(t), 'playing');
-  assert.ok(finalsNote(t).includes(NOT_YET));
-  assert.deepEqual(revealedBoards(t).map((b) => b.id), ['A', 'B']);
-  assert.equal(finalMarks(t).size, 0);
-});
-
-test('when done the finals board and the champion are there', () => {
-  const t = normalizeTournament(sample('done'));
-  assert.equal(finalsStage(t), 'result');
-  assert.equal(finalsNote(t), null);
-  assert.deepEqual(revealedBoards(t).map((b) => b.id), ['A', 'B', 'final']);
-  assert.equal(revealedBoards(t).at(-1).label, 'Finals');
-  assert.deepEqual([...finalMarks(t)], [['b2', 'Champion']]);
-});
-
-test('a separately loaded final board wins over the copy in tournament.json', () => {
-  const t = normalizeTournament(sample('done'));
-  const other = board('x', 'y');
-  assert.equal(revealedBoards(t, other).at(-1).board, other);
-  const early = normalizeTournament(sample('between'));
-  assert.equal(revealedBoards(early, other).at(-1).id, 'final');
-});
-
-test('the exporter list decides who is marked qualified', () => {
-  const t = normalizeTournament(sample('between'));
-  // Group A is ranked a3, a2, a1; group B b2, b1.
-  assert.deepEqual([...qualifiedInGroup(t.groups[0], t)].sort(), ['a2', 'a3']);
-  assert.deepEqual([...qualifiedInGroup(t.groups[1], t)].sort(), ['b1', 'b2']);
-  assert.deepEqual([...groupMarks(t.groups[0], t)].map(([, v]) => v), ['Qualified', 'Qualified']);
-  // Tie-breaks are the exporter's business: a different list is honoured.
-  t.qualified = ['a1', 'b1'];
-  assert.deepEqual([...qualifiedInGroup(t.groups[0], t)], ['a1']);
-});
-
-test('without a list the top advance ranked rows are marked', () => {
-  for (const advance of [1, 2, 3]) {
-    const t = normalizeTournament({
-      advance,
-      groups: [{ name: 'A', teams: ['p', 'q', 'r', 's'], board: board('p', 'q', 'r', 's') }],
-    });
-    assert.deepEqual([...qualifiedInGroup(t.groups[0], t)], ['p', 'q', 'r'].slice(0, advance), `advance ${advance}`);
-  }
-});
-
-test('an unranked row is never marked qualified', () => {
-  const t = normalizeTournament({
-    advance: 2,
-    groups: [
-      {
-        name: 'A',
-        teams: ['p', 'q', 'r'],
-        board: { teams: [row('p', 1), { ...row('q', 2), score: null }, { ...row('r', 3), score: null }] },
-      },
-    ],
-  });
-  assert.deepEqual([...qualifiedInGroup(t.groups[0], t)], ['p']);
-});
-
-test('a group smaller than advance marks everyone in it', () => {
-  const t = normalizeTournament({
-    advance: 2,
-    groups: [{ name: 'A', teams: ['solo'], board: board('solo') }],
-  });
-  assert.deepEqual([...qualifiedInGroup(t.groups[0], t)], ['solo']);
-  const empty = normalizeTournament({ advance: 2, groups: [{ name: 'E', teams: [], board: { teams: [] } }] });
-  assert.equal(qualifiedInGroup(empty.groups[0], empty).size, 0);
-});
-
-test('advance wording', () => {
-  assert.equal(
-    advanceText(2),
-    'The best 2 of each group play a round robin to decide the champion.',
-  );
-  assert.match(advanceText(3), /best 3 of each group/);
-  assert.match(advanceText(1), /winner of each group/);
-  const t = normalizeTournament({ ...sample('drawn'), advance: 1 });
-  assert.match(finalsNote(t), /winner of each group.*finalists are known when Round 1 is complete/);
+test('the champion is marked only in the group they play in', () => {
+  const t = normalizeTournament({ ...sample('done'), champion: 'elsewhere' });
+  assert.equal(groupMarks(t.groups[0], t).size, 0);
 });
 
 test('a team page knows the group before and the results after', () => {
@@ -262,21 +119,12 @@ test('a team page knows the group before and the results after', () => {
   assert.equal(before.group, 'A');
   assert.equal(before.groupSize, 3);
   assert.equal(before.groupRow, null);
-  assert.equal(before.qualified, null);
-  assert.equal(before.inFinals, null);
   assert.equal(before.champion, false);
 
   const done = normalizeTournament(sample('done'));
-  const a2 = teamStanding('a2', done);
-  assert.equal(a2.groupRow.rank, 2);
-  assert.equal(a2.qualified, true);
-  assert.equal(a2.inFinals, true);
-  assert.equal(a2.finalRow.rank, 3);
-  const a1 = teamStanding('a1', done);
-  assert.equal(a1.qualified, false);
-  assert.equal(a1.inFinals, false);
-  assert.equal(a1.finalRow, null);
-  assert.equal(teamStanding('b2', done).champion, true);
+  assert.equal(teamStanding('a2', done).groupRow.rank, 2);
+  assert.equal(teamStanding('a3', done).champion, true);
+  assert.equal(teamStanding('a1', done).champion, false);
 
   const stranger = teamStanding('nobody', done);
   assert.equal(stranger.group, null);
@@ -284,25 +132,11 @@ test('a team page knows the group before and the results after', () => {
 });
 
 test('the header never claims a last result in a tournament', () => {
-  const tournament = { mode: 'tournament' };
-  assert.equal(updatedText(tournament, 120), 'Updated 2 min ago');
-  assert.equal(updatedText(tournament, 1), 'Updated just now');
-  assert.equal(
-    updatedText(tournament, 600, { stale: true }),
-    'Connection lost – showing data from 10 min ago',
-  );
-  for (const text of [updatedText(tournament, 5), updatedText(tournament, 5, { stale: true })]) {
+  assert.equal(updatedText(120), 'Updated 2 min ago');
+  assert.equal(updatedText(1), 'Updated just now');
+  assert.equal(updatedText(600, { stale: true }), 'Connection lost – showing data from 10 min ago');
+  for (const text of [updatedText(5), updatedText(5, { stale: true })]) {
     assert.doesNotMatch(text, /last result/i);
-  }
-});
-
-test('the ladder header text is unchanged', () => {
-  for (const manifest of [{ mode: 'ladder' }, {}]) {
-    assert.equal(updatedText(manifest, 120), 'Last result 2 min ago');
-    assert.equal(
-      updatedText(manifest, 7200, { stale: true }),
-      'Connection lost – showing results from 2 h ago',
-    );
   }
 });
 
@@ -317,21 +151,8 @@ test('a team entry without a status (an older export) is submitted', () => {
   assert.deepEqual(normalizeTeams({}), []);
 });
 
-test('undrawn teams are those in no group; counts split by status', () => {
-  const t = normalizeTournament({ phase: 'drawn', groups: [{ name: 'A', teams: ['a', 'b'] }, { name: 'B', teams: ['c'] }] });
+test('counts split by status', () => {
   const teams = normalizeTeams([{ team: 'a' }, { team: 'b' }, { team: 'c' }, { team: 'd', status: 'registered' }, { team: 'e' }]);
-  assert.deepEqual(undrawnTeams(teams, t).map((e) => e.team), ['d', 'e']);
-  assert.deepEqual(undrawnTeams([], t), []);
-  assert.equal(undrawnTeams(teams, normalizeTournament({ phase: 'registration' })).length, 5);
   assert.deepEqual(statusCounts(teams), { submitted: 4, registered: 1 });
   assert.deepEqual(statusCounts([]), { submitted: 0, registered: 0 });
-});
-
-test('the register form counts only in a tournament, and only when set', () => {
-  const form = 'x=';
-  assert.equal(registerFormOpen({ mode: 'tournament', register_form: form }), form);
-  assert.equal(registerFormOpen({ mode: 'tournament', register_form: null }), null);
-  assert.equal(registerFormOpen({ mode: 'tournament' }), null);
-  assert.equal(registerFormOpen({ register_form: form }), null);
-  assert.equal(registerFormOpen(null), null);
 });

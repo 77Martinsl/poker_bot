@@ -1,5 +1,5 @@
-// The list of team names with their status, shared by the tournament home page
-// and the Register page. Names only: no results are ever shown here.
+// The list of team names with their status, shown on the Tournament page
+// before the round starts. Names only: no results are ever shown here.
 
 import { h } from '../dom.js';
 import { entryStatus } from '../tournament-core.js';

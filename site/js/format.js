@@ -40,34 +40,7 @@ export function plural(count, word) {
   return `${count} ${word}${suffix}`;
 }
 
-export function shortHash(hash) {
-  return hash ? String(hash).slice(0, 7) : '';
-}
-
-/**
- * What a team should be told when its repository could not be used, or null
- * when the fetch was fine. A failed validation ("invalid") is shown from the
- * version itself, so it is not repeated here.
- */
-export function syncProblemText(sync) {
-  if (!sync) return null;
-  const message = sync.message || 'no details';
-  switch (sync.status) {
-    case 'unreachable':
-      return (
-        `Could not fetch the repository (${message}). ` +
-        'Check the address, and that the repository is public.'
-      );
-    case 'rejected':
-      return `The repository was fetched but cannot be used: ${message}`;
-    case 'error':
-      return `Unexpected error while fetching the repository: ${message}`;
-    default:
-      return null;
-  }
-}
-
-/** Parses "#/team/alpha?kind=final" into {path: ['team','alpha'], query}. */
+/** Parses "#/matches?team=alpha" into {path: ['matches'], query: {team: 'alpha'}}. */
 export function parseHash(hash) {
   const raw = String(hash || '').replace(/^#/, '');
   const at = raw.indexOf('?');

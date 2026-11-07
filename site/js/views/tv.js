@@ -5,11 +5,10 @@
 import { allPairings } from '../api.js';
 import { h } from '../dom.js';
 import { replayView } from './replay.js';
-import { leaderboardTable, kindBadge, emptyBoard } from './leaderboard.js';
 import { matchRow } from './matches.js';
 import { matrixGrid } from './matrix.js';
-import { finalsStage, advanceText, isTournament, phaseInfo, revealedBoards } from '../tournament-core.js';
-import { championBanner, finalsSection, groupCard, phaseBanner, roundOneSection } from './tournament.js';
+import { phaseInfo, revealedBoards } from '../tournament-core.js';
+import { championBanner, groupCard, phaseBanner, roundOneSection } from './tournament.js';
 
 const SLIDE_SECONDS = 14;
 const REPLAY_SECONDS = 30;
@@ -51,9 +50,8 @@ export function tvView(ctx) {
   let paused = false;
   let child = null;
   let showToken = 0;
-  const tournament = isTournament(ctx.data.manifest);
 
-  // Shared by both formats: the newest results and a hand to watch.
+  // The newest results and a hand to watch.
   const sharedSlides = () => [
     {
       name: 'Latest results',
@@ -72,7 +70,7 @@ export function tvView(ctx) {
         if (!withReplay.length) return null;
         const pairing = pick(withReplay);
         const view = await replayView(
-          { path: ['replay', pairing.id, String(Math.floor(Math.random() * 20))], data: ctx.data, kind: ctx.kind, query: {} },
+          { path: ['replay', pairing.id, String(Math.floor(Math.random() * 20))], data: ctx.data, query: {} },
           { compact: true, autoplay: true, onFinish: () => next() },
         );
         child = view;
@@ -81,30 +79,10 @@ export function tvView(ctx) {
     },
   ];
 
-  const ladderSlides = () => [
-    {
-      name: 'Leaderboard',
-      build() {
-        const board = ctx.data.boards[ctx.kind];
-        if (!board || !board.teams.length) return emptyBoard(ctx.kind);
-        return h('div', { class: 'card' }, leaderboardTable(board, { limit: 10 }));
-      },
-    },
-    {
-      name: 'Head-to-head',
-      build() {
-        const board = ctx.data.boards[ctx.kind];
-        if (!board || board.teams.length < 2) return null;
-        return matrixCard(board);
-      },
-    },
-    ...sharedSlides(),
-  ];
-
   /** Slides for the tournament: what exists, and nothing that is not published. */
   const tournamentSlides = () => {
     const t = ctx.data.tournament;
-    const boards = revealedBoards(t, ctx.data.boards.final);
+    const boards = revealedBoards(t);
     return [
       {
         name: 'Tournament',
@@ -114,15 +92,14 @@ export function tvView(ctx) {
             { class: 'tvstatus' },
             phaseBanner(t),
             championBanner(t),
-            t.rounds !== 1 && finalsStage(t) === 'unknown' ? h('p', { class: 'note' }, advanceText(t.advance)) : null,
           );
         },
       },
       {
-        name: t.rounds === 1 ? 'The round' : 'Round 1: groups',
+        name: 'The round',
         build() {
           // Before the reveal: the draw. After it, each group has its own slide.
-          return boards.some((b) => b.kind === 'group') || !t.groups.length ? null : roundOneSection(t);
+          return boards.length || !t.groups.length ? null : roundOneSection(t);
         },
       },
       ...t.groups
@@ -131,12 +108,6 @@ export function tvView(ctx) {
           name: `Group ${g.name}`,
           build: () => groupCard(g, t),
         })),
-      {
-        name: 'Finals',
-        build() {
-          return t.rounds === 1 || finalsStage(t) === 'unknown' ? null : finalsSection(t, ctx.data.boards.final);
-        },
-      },
       ...boards.map((b) => ({
         name: `Head-to-head: ${b.label}`,
         build: () => (b.board.teams.length < 2 ? null : matrixCard(b.board)),
@@ -145,13 +116,12 @@ export function tvView(ctx) {
     ];
   };
 
-  const buildSlides = () => (tournament ? tournamentSlides() : ladderSlides());
   let slides = [];
 
   async function show(position) {
     const mine = ++showToken;
     clearTimeout(timer);
-    slides = buildSlides(); // the data may have changed since the last slide
+    slides = tournamentSlides(); // the data may have changed since the last slide
     if (child && child.dispose) child.dispose();
     child = null;
     // Skip slides with nothing to show (for example no replays published).
@@ -168,7 +138,7 @@ export function tvView(ctx) {
         title.replaceChildren(
           slide.name,
           ' ',
-          tournament ? h('span', { class: 'badge' }, phaseInfo(ctx.data.tournament.phase, ctx.data.tournament.submissions).label) : kindBadge(ctx.kind),
+          h('span', { class: 'badge' }, phaseInfo(ctx.data.tournament.phase, ctx.data.tournament.submissions).label),
         );
         body.replaceChildren(content);
         dots.replaceChildren(...slides.map((_, i) => h('span', { class: i === index ? 'on' : '' })));

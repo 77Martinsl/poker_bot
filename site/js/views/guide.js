@@ -2,9 +2,8 @@ import { loadGuide } from '../api.js';
 import { h } from '../dom.js';
 import { renderMarkdown } from '../markdown.js';
 import { submissionsCard } from './home.js';
-import { isTournament } from '../tournament-core.js';
 
-/** The how-to-submit guide (SUBMITTING.md), shown as a page. */
+/** The how-to-submit guide shown as a page. */
 export async function guideView(ctx) {
   const page = h('div', { class: 'page guide' });
   if (!ctx.data.manifest.has_guide) {
@@ -24,17 +23,5 @@ export async function guideView(ctx) {
   const submissions = submissionsCard(ctx.data.submissions);
   if (submissions) page.appendChild(submissions);
   page.appendChild(renderMarkdown(text));
-  if (!isTournament(ctx.data.manifest)) {
-    // The tournament has no repository submissions to check on.
-    page.appendChild(
-      h(
-        'p',
-        { class: 'note' },
-        'Already submitted? ',
-        h('a', { href: '#/submissions' }, 'Check the status of your bot'),
-        '.',
-      ),
-    );
-  }
   return { el: page, title: 'How to submit' };
 }

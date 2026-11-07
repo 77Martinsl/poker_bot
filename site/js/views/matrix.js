@@ -1,8 +1,7 @@
 import { cellColors, matrixMax } from '../charts.js';
 import { h } from '../dom.js';
 import { MINUS, buildHash, fmtBB, fmtPlain } from '../format.js';
-import { NOT_YET, isTournament, revealedBoards } from '../tournament-core.js';
-import { emptyBoard, kindBadge } from './leaderboard.js';
+import { NOT_YET, revealedBoards } from '../tournament-core.js';
 
 /** Reads the colour tokens as hex so cell text contrast can be computed. */
 function readTokens() {
@@ -141,17 +140,15 @@ function matrixBody(board) {
   ];
 }
 
-/** Tournament format: pick which group (or the finals) to look at. */
-function tournamentMatrixView(ctx) {
-  const boards = revealedBoards(ctx.data.tournament, ctx.data.boards.final);
+/** Pick which group to look at (there is one). */
+export function matrixView(ctx) {
+  const boards = revealedBoards(ctx.data.tournament);
   const page = h('div', { class: 'page' }, h('header', {}, h('h1', {}, 'Head-to-head')));
   if (!boards.length) {
     page.appendChild(h('div', { class: 'empty card' }, NOT_YET));
     return { el: page, title: 'Head-to-head' };
   }
-  // Default to the finals once they exist: that is where the champion is decided.
-  const chosen =
-    boards.find((b) => b.id === ctx.query.board) || boards.find((b) => b.kind === 'final') || boards[0];
+  const chosen = boards.find((b) => b.id === ctx.query.board) || boards[0];
   const select = h(
     'select',
     {
@@ -168,20 +165,5 @@ function tournamentMatrixView(ctx) {
     return { el: page, title: 'Head-to-head' };
   }
   page.append(...matrixBody(chosen.board));
-  return { el: page, title: 'Head-to-head' };
-}
-
-export function matrixView(ctx) {
-  if (isTournament(ctx.data.manifest)) return tournamentMatrixView(ctx);
-  const board = ctx.data.boards[ctx.kind];
-  const page = h('div', { class: 'page' });
-  page.appendChild(
-    h('header', {}, h('h1', {}, 'Head-to-head'), kindBadge(ctx.kind)),
-  );
-  if (!board || board.teams.length < 2) {
-    page.appendChild(emptyBoard(ctx.kind));
-    return { el: page, title: 'Head-to-head' };
-  }
-  page.append(...matrixBody(board));
   return { el: page, title: 'Head-to-head' };
 }

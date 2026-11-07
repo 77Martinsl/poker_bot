@@ -143,9 +143,6 @@
   .nowrap {
     @apply whitespace-nowrap;
   }
-  .mono {
-    @apply text-sm;
-  }
   .loading,
   .empty {
     @apply text-sm italic text-zinc-500 dark:text-zinc-400;
@@ -199,9 +196,6 @@
   .badge.final.mark {
     @apply border-blue-600 bg-blue-600 text-white dark:border-blue-600 dark:text-white;
   }
-  .badge.prov {
-    @apply border-dashed;
-  }
   .badge.ok {
     @apply border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400;
   }
@@ -223,15 +217,6 @@
     @apply cursor-pointer rounded-sm border border-zinc-300 bg-zinc-100 px-3 py-1 text-sm duration-200 hover:bg-zinc-200 active:opacity-75 active:duration-100 disabled:cursor-default disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700;
     transition-timing-function: var(--ease-out);
   }
-  .seg {
-    @apply inline-flex overflow-hidden rounded-sm border border-zinc-300 dark:border-zinc-700;
-  }
-  .seg button {
-    @apply rounded-none border-0;
-  }
-  .seg button[aria-pressed="true"] {
-    @apply bg-blue-600 text-white hover:bg-blue-600;
-  }
   select {
     @apply rounded-sm border border-zinc-300 bg-zinc-100 px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-800;
   }
@@ -239,19 +224,6 @@
   input[type="range"] {
     @apply accent-blue-600 dark:accent-blue-500;
   }
-  input[type="text"] {
-    @apply w-full max-w-sm rounded-sm border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900;
-  }
-  input[type="text"][aria-invalid="true"] {
-    @apply border-zinc-900 dark:border-white;
-  }
-  .btn-primary {
-    @apply mt-4 inline-block justify-self-start rounded-sm bg-blue-600 px-4 py-2 text-white no-underline duration-200 hover:bg-blue-700 active:opacity-75 active:duration-100;
-  }
-  .btn-primary[aria-disabled="true"] {
-    @apply pointer-events-none cursor-not-allowed opacity-40;
-  }
-
   /* footer status */
   .updated.stale {
     @apply font-bold text-zinc-900 dark:text-white;
@@ -412,19 +384,6 @@
   .stat .k {
     @apply text-xs text-zinc-600 dark:text-zinc-400;
   }
-  .versions {
-    @apply list-none;
-  }
-  .versions li {
-    @apply flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-zinc-300/70 py-2 text-sm dark:border-white/10;
-  }
-  .versions li:first-child {
-    @apply pt-0;
-  }
-  .versions li:last-child {
-    @apply border-b-0 pb-0;
-  }
-
   /* ---- replay ---- */
   .replay {
     @apply grid items-start gap-2;
@@ -620,32 +579,12 @@
     }
   }
 
-  /* the register page: plain text and a numbered list inside one card */
+  /* the submissions card on the guide page: its paragraphs spaced inside one card */
   .guide .card > * + * {
     @apply mt-3;
   }
-  .guide .card > ol {
-    @apply ml-5 list-decimal space-y-1;
-  }
   .guide .card > h2 {
     @apply mt-6;
-  }
-
-  /* ---- the team-name register page ---- */
-  .field {
-    @apply flex flex-col items-start gap-2;
-  }
-  .field > label {
-    @apply text-sm dark:text-white;
-  }
-  .field .btn-primary {
-    @apply mt-2 self-start;
-  }
-  .field-msg {
-    @apply min-h-5 text-sm;
-  }
-  .field-msg.bad {
-    @apply font-bold;
   }
 
   /* ---- tournament ---- */
@@ -671,8 +610,7 @@
   .group > h3 {
     @apply mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1;
   }
-  .card > h3,
-  .card > h2.counted {
+  .card > h3 {
     @apply mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1;
   }
   .chips {
