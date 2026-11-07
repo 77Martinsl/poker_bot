@@ -252,15 +252,20 @@ class GameState:
         Raises InvalidAction, with the reason, if the move is illegal.
 
         Fold and call are always legal on your turn (a short stack calls
-        all-in for less); a raise must be allowed and within range.
+        all-in for less); a raise must be allowed and within range. Any
+        other kind is not a betting move.
         """
         if action.player_id != self.to_act:
             raise InvalidAction(
                 f"player {action.player_id} acted out of turn; "
                 f"it is player {self.to_act}'s turn"
             )
-        if action.kind != "raise":
+        if action.kind in ("fold", "call"):
             return
+        if action.kind != "raise":
+            raise InvalidAction(
+                f"{action.kind!r} is not a move: fold, call or raise"
+            )
         if not self.can_raise:
             raise InvalidAction("you cannot raise now; fold or call")
         low, high = self.min_raise_to, self.max_raise_to
@@ -290,12 +295,14 @@ class GameState:
             self.folded[player_id] = True
         elif action.kind == "call":
             self._commit(player_id, self.call_amount)
-        else:
+        elif action.kind == "raise":
             raise_size = action.amount - self.current_bet
             self._commit(player_id, action.amount - self.bets[player_id])
             if raise_size >= self.last_raise:  # only a full raise reopens
                 self.last_raise = raise_size
                 self.acted = [False] * self.num_players
+        else:  # backstop: validate_action already rejects other kinds
+            raise InvalidAction(f"{action.kind!r} is not a move")
         self.acted[player_id] = True
         self._pass_turn(after=player_id)
 

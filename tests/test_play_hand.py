@@ -43,17 +43,8 @@ def _invalid_cases():
 
 
 @pytest.mark.parametrize("case", list(_invalid_cases()))
-def test_S01_to_S04_invalid_input_raises_ValueError(case):
-    """S-01..S-04: mismatched lengths, short or duplicate decks and invalid setup values raise ValueError."""
-    kw = dict(_invalid_cases()[case])
-    models = [Scripted() for _ in range(kw.pop("n_models"))]
-    with pytest.raises(ValueError):
-        play_hand(models, **kw)
-
-
-@pytest.mark.parametrize("case", list(_invalid_cases()))
 def test_S09_validation_before_any_seed(case):
-    """S-09: on invalid input no model's seed is called."""
+    """S-09 (S-01..S-04): mismatched lengths, short or duplicate decks and invalid setup values raise ValueError before any model's seed is called."""
     kw = dict(_invalid_cases()[case])
     models = [Scripted() for _ in range(kw.pop("n_models"))]
     with pytest.raises(ValueError):
@@ -188,13 +179,17 @@ def test_R06_heads_up_order_with_button_1():
 
 def test_R07_returned_actions_recorded_in_order():
     """R-07: a clean model's returned actions appear unchanged, in order, in HandResult.actions."""
+    deck = std_deck()
     scripts = [[("raise", 60), ("raise", 40)], ["fold"], ["call", "call"]]
     models = [Scripted(s) for s in scripts]
-    result = play_hand(models, std_deck(), [500, 500, 500])
-    assert [a for a in result.actions if a.player_id == 0] == [
-        A.raise_to(0, 60), A.raise_to(0, 40)] + [
-        a for a in result.actions if a.player_id == 0][2:]
-    assert [a for a in result.actions if a.player_id == 1] == [A.fold(1)]
+    result = play_hand(models, deck, [500, 500, 500])
+    r = [A.reveal_card(c) for c in deck[6:11]]
+    assert result.actions == (
+        [A.raise_to(0, 60), A.fold(1), A.call(2)] + r[:3]
+        + [A.call(2), A.raise_to(0, 40), A.call(2)] + r[3:4]
+        + [A.call(2), A.call(0)] + r[4:5]
+        + [A.call(2), A.call(0)]
+    )
     assert result.faults == {}
 
 

@@ -197,7 +197,7 @@ move, is not fatal; the engine checks (nothing owed) or folds for you
 instead. An empty `faults` means your bot played legally.
 
 Run the engine's own tests with `.venv/bin/pip install -r
-requirements-dev.txt`, then `.venv/bin/python -m pytest tests -q`.
+requirements-dev.txt`, then `.venv/bin/python -m pytest -q`.
 
 ### Common mistakes
 
@@ -214,8 +214,10 @@ requirements-dev.txt`, then `.venv/bin/python -m pytest tests -q`.
 
 Do not assume an answer to these; ask the user, who can ask the organisers:
 the match format (heads-up or more players, number of hands, duplicate
-deals), what happens after an `InvalidAction`, time limits per move, and how
-to submit (pickle format, Python version).
+deals), what happens after an `InvalidAction` (the local engine checks or
+folds for you), time limits per move, how to submit (pickle format, Python
+version), and whether a big blind posted all-in for less still makes
+others call the full big blind (currently they only call what was posted).
 
 ## For maintainers
 
@@ -230,10 +232,17 @@ to submit (pickle format, Python version).
   `GameStateView` of it; `GameStateView.PUBLIC` is the whitelist of what
   they may read. Private information (hole cards, player id) lives in
   `GameInterface` and the model, never in `GameState`.
-- The view stops mistakes, not cheating: a model in the same process can
-  reach the shared state with `object.__getattribute__(view, "_state")`
-  and change it. Accepted for now; fix it (per-seat copies, or bots in
-  separate processes) before running untrusted bots for real.
+- The view stops mistakes, not cheating. In the same process a model can
+  change the shared state (`view._state`), rewrite `GameStateView.PUBLIC`,
+  read every hole card and the deck through `sys._getframe` or `gc`, and
+  edit Cards and actions with `object.__setattr__`. Per-seat copies would
+  not fix this. Requirement for the organiser's engine: each model runs in
+  its own sandboxed process (which also guards the OS and handles time
+  limits, `sys.exit` and crashes). `engine.play_hand` is in-process and only
+  for trusted, local play.
+- `engine.play_hand` never trusts a returned action: anything not exactly a
+  `PlayerAction` is a fault, and the rest is rebuilt from its fields and
+  validated before it is applied or shown to other seats.
 - The engine routes turns: `GameInterface` assumes it is only called when
   its player is `to_act`, and the engine applies the returned action.
   `engine.play_hand` is one hand only; match format (seating, button

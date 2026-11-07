@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from card import Card
 from game_interface import GameInterface
-from game_state import GameState, GameStateView
+from game_state import GameState, GameStateView, InvalidAction
 from hand_eval import evaluate
 from player_action import PlayerAction
 
@@ -34,6 +34,8 @@ def play_hand(
     then the board is dealt in order. The deck is not changed. A model whose
     seed or run raises, or whose move is illegal, has that move replaced by
     a check (nothing owed) or a fold, and the reason goes in faults.
+
+    A seat with no chips is still dealt in, so do not seat busted players.
     """
     count = len(models)
     # Every input is checked before any model sees the hand.
@@ -91,16 +93,29 @@ def _ask(seat, pending, state, faults, player_id) -> PlayerAction:
     """The seat's move, or a check or fold in its place if it faults."""
     if seat is not None:
         try:
-            return seat.process_action(pending)
+            action = seat.process_action(pending)
+            # Rebuild from plain fields, so a forged or subclassed action
+            # cannot change under the engine once validated.
+            if type(action) is not PlayerAction:
+                raise InvalidAction("run() must return a PlayerAction")
+            action = PlayerAction(action.player_id, action.kind, action.amount)
+            state.validate_action(action)
+            return action
         except Exception as error:
-            faults.setdefault(player_id, _describe("run", error))
+            if player_id not in faults:
+                faults[player_id] = _describe("run", error)
     if state.call_amount == 0:
         return PlayerAction.call(player_id)
     return PlayerAction.fold(player_id)
 
 
 def _describe(where: str, error: Exception) -> str:
-    return f"{where}: {type(error).__name__}: {error}"
+    """Never raises, even for an exception whose str() does."""
+    try:
+        message = str(error)
+    except Exception:
+        message = "(message could not be shown)"
+    return f"{where}: {type(error).__name__}: {message}"
 
 
 def payouts(

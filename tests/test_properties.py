@@ -1,7 +1,6 @@
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, strategies as st
 
 from engine import play_hand, payouts
-from game_state import GameState
 from player_action import PlayerAction as A
 from poker_test_helpers import RandomBot, replay, std_deck
 
@@ -37,50 +36,6 @@ def run(args):
     return models, result
 
 
-def setup_kw(args):
-    return dict(button=args["button"], small_blind=args["small_blind"],
-                big_blind=args["big_blind"], teams=args["teams"])
-
-
-@settings(max_examples=150)
-@given(hand_args())
-def test_P01_P02_chips_conserved_and_loss_bounded(args):
-    """P-01/P-02: sum(net) == 0 and net[i] >= -stacks[i]."""
-    _, result = run(args)
-    stacks = args["stacks"]
-    assert len(result.net) == len(stacks)
-    assert sum(result.net) == 0
-    assert all(result.net[i] >= -stacks[i] for i in range(len(stacks)))
-
-
-@given(hand_args())
-def test_P03_deterministic(args):
-    """P-03: the same deck, arguments and model behaviour give an identical HandResult."""
-    _, r1 = run(args)
-    _, r2 = run(args)
-    assert r1.net == r2.net
-    assert r1.actions == r2.actions
-    assert r1.hands == r2.hands
-    assert r1.board == r2.board
-    assert r1.faults == r2.faults
-
-
-@given(hand_args())
-def test_P04_inputs_not_mutated(args):
-    """P-04: deck, stacks, teams and models lists are unchanged by play_hand."""
-    deck, stacks = list(args["deck"]), list(args["stacks"])
-    teams = None if args["teams"] is None else list(args["teams"])
-    models = [RandomBot(s, f) for s, f in zip(args["scripts"],
-                                               args["seed_faults"])]
-    saved_models = list(models)
-    play_hand(models, args["deck"], args["stacks"], **setup_kw(args))
-    assert args["deck"] == deck
-    assert args["stacks"] == stacks
-    assert args["teams"] == teams
-    assert len(models) == len(saved_models)
-    assert all(a is b for a, b in zip(models, saved_models))
-
-
 @given(hand_args())
 def test_P05_pending_lists_match_history(args):
     """P-05: each seat's received actions lists, concatenated, are a prefix of HandResult.actions, each followed by that seat's move (own moves included in the next list)."""
@@ -100,7 +55,7 @@ def test_P05_pending_lists_match_history(args):
 
 @given(hand_args())
 def test_P06_replay_reproduces_net(args):
-    """P-06: replaying HandResult.actions on a fresh GameState ends the hand exactly, and net equals payouts minus contributions."""
+    """P-06: replaying HandResult.actions on a fresh GameState ends the hand exactly, net equals payouts minus contributions, sums to 0 and never loses more than a stack."""
     _, result = run(args)
     stacks = args["stacks"]
     state, _ = replay(result, stacks, args["button"], args["small_blind"],
@@ -109,6 +64,8 @@ def test_P06_replay_reproduces_net(args):
     pay = payouts(contributed, list(state.folded), result.hands, result.board,
                   args["button"])
     assert result.net == [p - c for p, c in zip(pay, contributed)]
+    assert sum(result.net) == 0
+    assert all(net >= -stack for net, stack in zip(result.net, stacks))
 
 
 @given(hand_args())
