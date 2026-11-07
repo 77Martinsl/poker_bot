@@ -23,8 +23,7 @@ class GameInterface:
     """
 
     # NOTE: DO NOT CHANGE THIS CODE
-    # Pydantic checks the arguments against their types (strict: no
-    # coercion). The model is not checked: any object with seed() and run()
+    # The model is not checked: any object with seed() and run()
     # will do, it need not subclass Model.
     @validate_call(
         config=ConfigDict(strict=True, arbitrary_types_allowed=True)
