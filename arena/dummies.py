@@ -1,9 +1,12 @@
 """
-Sparring bots to measure your model against.
+Dummy bots: sparring partners for evals and fillers for the arena.
 
-Sanity bots (FoldBot, CallBot, RandomBot, ShoveBot) are easy to beat: losing
-to them means a bug. The sparring bots (TightBot, EquityBot) play simple but
-sensible poker. Each is a plain Model: seed() then run() every turn.
+Sanity bots (FoldBot, CallBot, RandomBot, ShoveBot) are simple: you should
+beat FoldBot clearly, while ShoveBot and RandomBot punish bots that play too
+tight or too passively, so even a sensible bot can lose to them within the
+noise. The sparring bots (TightBot, EquityBot) play simple but sensible
+poker. Every class is built as Cls(seed=...): the seed makes the random
+ones repeatable and is ignored by the rest.
 """
 
 import random
@@ -17,7 +20,7 @@ from player_action import PlayerAction
 class _Bot:
     """Stores the hand and seat, as every model must."""
 
-    def __init__(self):
+    def __init__(self, seed: int | None = None):
         self.hand: list[Card] = []
         self.player_id = None
 
@@ -66,7 +69,7 @@ class RandomBot(_Bot):
     time, folds (when it costs something) 20%, otherwise calls."""
 
     def __init__(self, seed: int | None = None):
-        super().__init__()
+        super().__init__(seed)
         self.rng = random.Random(seed)
 
     def run(self, actions, game_state):
@@ -87,7 +90,8 @@ class TightBot(_Bot):
 
     Preflop: raises to about three big blinds (or the pot when facing a
     raise) with a pair of 8s or better, or two cards ten or higher with an
-    ace or king; otherwise checks or folds. After the flop: bets the pot
+    ace or king; otherwise checks or folds. After the flop, only hands that
+    use a hole card count (a pair on the board is everyone's): bets the pot
     with two pair or better, calls cheap bets with a pair, else checks or
     folds.
     """
@@ -99,10 +103,16 @@ class TightBot(_Bot):
                 total = max(3 * game_state.big_blind, game_state.pot)
                 return self._raise_to(game_state, total)
             return self._check_or_fold(game_state)
-        category = evaluate(self.hand + list(game_state.board))[0]
-        if category >= 2:  # two pair or better
+        board = list(game_state.board)
+        category = evaluate(self.hand + board)[0]
+        board_ranks = {card.rank for card in board}
+        connects = (
+            self.hand[0].rank == self.hand[1].rank
+            or any(card.rank in board_ranks for card in self.hand)
+        )
+        if category >= 2 and connects:  # two pair or better, ours
             return self._raise_to(game_state, game_state.pot)
-        if category == 1 and game_state.pot_odds < 0.3:
+        if category >= 1 and connects and game_state.pot_odds < 0.3:
             return PlayerAction.call(self.player_id)
         return self._check_or_fold(game_state)
 
@@ -116,8 +126,8 @@ class EquityBot(_Bot):
     calls when it beats the pot odds, otherwise checks or folds.
     """
 
-    def __init__(self, samples: int = 100, seed: int | None = None):
-        super().__init__()
+    def __init__(self, seed: int | None = None, samples: int = 100):
+        super().__init__(seed)
         self.samples = samples
         self.rng = random.Random(seed)
 
@@ -153,14 +163,14 @@ class EquityBot(_Bot):
         return won / self.samples
 
 
-SANITY = {
+SANITY: dict[str, type] = {
     "fold": FoldBot,
     "call": CallBot,
     "random": RandomBot,
     "shove": ShoveBot,
 }
-SPARRING = {
+SPARRING: dict[str, type] = {
     "tight": TightBot,
     "equity": EquityBot,
 }
-BASELINES = SANITY | SPARRING
+DUMMIES = SANITY | SPARRING

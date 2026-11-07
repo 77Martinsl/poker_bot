@@ -1,34 +1,37 @@
 """
 Checks that your model (model.Model) is a valid submission: it pickles,
-and it plays legally, without faults, against every baseline.
+and played from that pickle in its own worker process, as in the arena, it
+plays every dummy bot without faults and within the time limit.
 
     .venv/bin/python -m pytest tests/test_model.py -q
 
-A failure names the fault (an exception in seed or run, or an illegal
-move). This checks validity, not strength: use python -m evals for that.
+A failure names the fault (an exception in seed, run or end_game, an
+illegal move, or a timeout). This checks validity, not strength: use
+python -m evals for that.
 """
 
 import pickle
 
 import pytest
 
-from evals.baselines import BASELINES
-from evals.match import play_match
+from arena.dummies import DUMMIES
+from arena.match import MatchConfig, play_match
+from arena.players import player
+from evals.score import score
 from model import Model
 
-TIME_LIMIT = 10.0  # seconds per move, as the arena enforces it
+
+@pytest.fixture(scope="module")
+def you(tmp_path_factory):
+    """Your model pickled once, like a submission."""
+    path = tmp_path_factory.mktemp("you") / "you.pkl"
+    path.write_bytes(pickle.dumps(Model()))
+    return player(str(path))
 
 
-def _you():
-    """A factory like the arena's: pickled once, unpickled per use."""
-    blob = pickle.dumps(Model())
-    return lambda: pickle.loads(blob)
-
-
-def _check(factories, deals):
-    result = play_match(factories, deals)
+def _check(players, **config):
+    result = score([play_match(players, MatchConfig(**config))])
     assert result.faults[0] == 0, result.first_faults[0]
-    assert result.max_move_seconds[0] < TIME_LIMIT
 
 
 def test_model_pickles():
@@ -36,12 +39,18 @@ def test_model_pickles():
     assert hasattr(model, "seed") and hasattr(model, "run")
 
 
-@pytest.mark.parametrize("opponent", list(BASELINES))
-def test_plays_legally_heads_up(opponent):
-    _check({"you": _you(), opponent: BASELINES[opponent]}, deals=10)
+@pytest.mark.parametrize("opponent", list(DUMMIES))
+def test_plays_legally_heads_up(you, opponent):
+    _check([you, player(opponent)], deals=10)
 
 
-def test_plays_legally_at_a_full_table():
+def test_plays_legally_at_a_full_table(you):
     # EquityBot is left out: it is slow with many players.
-    others = {n: c for n, c in BASELINES.items() if n != "equity"}
-    _check({"you": _you()} | others, deals=4)
+    others = [player(name) for name in DUMMIES if name != "equity"]
+    _check([you] + others, deals=4)
+
+
+def test_plays_legally_with_short_stacks(you):
+    # Short stacks reach all-ins, side pots and "cannot raise" cheaply.
+    others = [player(name) for name in ("shove", "random", "call")]
+    _check([you] + others, deals=10, stack=60)
