@@ -245,10 +245,15 @@ rebuilt from its pickle for each rotation and keeps its memory within one
 
 ### Submitting
 
-Not decided yet (see below). The arena expects one folder per team: the
-pickle named after the team next to the code it needs, e.g.
-`bots/team_a/team_a.pkl` and `bots/team_a/model.py`. The pickle stores your
-class by reference, so the module must be importable from that folder.
+`.venv/bin/python -m submit --team myteam` (Windows: `.venv\Scripts\python`)
+pickles `Model()` with plain `pickle.dump` to `myteam.pkl`, lists the files to
+upload (the `.pkl` and the `.py` files it needs; the pickle stores the class by
+reference, so the code must come with it), shows what the organisers' code
+review will flag, and plays the model from a clean copy of just those files.
+Teams upload every file it lists in the Google Form; the organisers read the
+code before anything runs. A pickle may only name the team's own modules and
+plain data; a team `.py` file may not be named like a standard library or
+arena module (`random.py`, `engine.py`), nor sit in a folder.
 
 ### Common mistakes
 
@@ -271,15 +276,28 @@ class by reference, so the module must be importable from that folder.
 Do not assume an answer to these; ask the user, who can ask the organisers:
 the match format (heads-up or more players, number of hands, duplicate
 deals), what happens after an `InvalidAction` (the local engine checks or
-folds for you), time limits per move, how to submit (pickle format, Python
-version), and whether a big blind posted all-in for less still makes
+folds for you), time limits per move, and whether a big blind posted all-in for less still makes
 others call the full big blind (currently they only call what was posted).
 
 ## For maintainers
 
 - This repo is the source of truth for the arena. The older
-  `poker_bot_infrastructure` repo is reference only: never port its live
-  ladder, SQLite, results site or websocket code.
+  `poker_bot_infrastructure` repo is reference only (its results site was
+  ported into `site/`, adapted to this engine; never port its live ladder,
+  SQLite or websocket code).
+- Event tooling (the organiser's side, on top of the arena): `submit.py`
+  (teams), `arena/vet.py` (what a pickle may name, what the code is flagged
+  for; a child process reads the pickle with every global stubbed, so nothing
+  in it runs), `arena/event.py` (`python -m arena.event`: import, review,
+  approve, run, export; state under `event/`), `arena/replays.py` (a played
+  hand in the compact form the site replays), `arena/site_export.py` (results
+  site with an artificial delay and spacing so it feels live), `site/` (the
+  static pages, plain ES modules, Tailwind compiled from `site-src/`, no
+  external requests) and `event.json` (the Home page text). The round is one
+  heads-up round robin, each pairing a duplicate match; best bb/100 wins.
+- The worker and remote model run on Windows, macOS and Linux (replies are
+  read by a thread, not `select`; the process tree is killed with `taskkill`
+  on Windows). The memory limit (`RLIMIT_AS`) applies on Linux only.
 - Scope: pickled `Model` submissions, bot-vs-bot match evaluation, action
   validation, and the arena (`arena/`): matches between team pickles in
   sandboxed workers, raw results, bankroll and checkpoints. Simplicity
