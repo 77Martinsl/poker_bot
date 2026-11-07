@@ -1,6 +1,0 @@
-{
-  "name": "arena-site",
-  "private": true,
-  "type": "module",
-  "description": "Development only: lets Node import the browser modules for tests. Not published."
-}

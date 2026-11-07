@@ -128,7 +128,8 @@ best bb/100 is the champion. It saves every hand, can be stopped and started
 again (finished pairings are skipped), and `--concurrency` sets how many
 pairings play at once.
 
-`export` writes the results site (the pages in `site/` plus `data/`). With
+`export` writes the results site (the organiser's pages, kept outside this
+repository in `site/`, plus `data/`). With
 `--delay` and `--spacing` each finished pairing is shown (with a replay of its
 biggest hands) some time after it ended and at least that far after the
 previous one, so the site feels live but runs behind; standings are computed

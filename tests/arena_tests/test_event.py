@@ -19,6 +19,16 @@ from card_utils import full_deck
 from engine import play_hand
 
 
+# The front end (site/, event.json) is not in the repository: it is kept by the
+# organiser. Tests that need those files are skipped where they are missing.
+needs_site = pytest.mark.skipif(
+    not os.path.isdir(os.path.join(E.REPO, "site")),
+    reason="the site/ front end is not in this checkout")
+needs_event_file = pytest.mark.skipif(
+    not os.path.isfile(os.path.join(E.REPO, "event.json")),
+    reason="event.json is not in this checkout")
+
+
 def upload(folder, who, team, files, pickle_as=None):
     """Drops one respondent's files the way Google Forms names them."""
     work = folder.parent / f"work-{who.replace(' ', '')}"
@@ -390,6 +400,7 @@ def test_the_exported_data_is_strict_json_and_in_bb_per_100(played,
     assert shove["wins"] + shove["draws"] + shove["losses"] == 2
 
 
+@needs_site
 def test_the_export_writes_the_pages_the_guide_and_the_home_text(
         played, tmp_path):
     out = str(tmp_path / "site")
@@ -444,6 +455,7 @@ def test_the_event_file_is_tidied(tmp_path):
         site_export.load_event(str(tmp_path / "missing.json"))
 
 
+@needs_event_file
 def test_the_repositorys_event_file_loads():
     found = site_export.load_event(os.path.join(E.REPO, "event.json"))
     assert found["timeline"] and found["intro"] and found["prize"]
@@ -462,6 +474,7 @@ def run_cli(args, cwd=None):
                           timeout=300)
 
 
+@needs_event_file
 def test_the_event_command_line_end_to_end(drive, tmp_path):
     upload(drive, "Ann Lee", "alpha", {"model.py": E.CALL})
     upload(drive, "Bo Chen", "bravo", {"model.py": "import os\n" + E.SHOVE})
@@ -610,6 +623,7 @@ def test_the_link_leaves_the_data_again_when_submissions_close(
     assert FORM not in published_text(out)
 
 
+@needs_event_file
 def test_the_repositorys_event_file_never_holds_the_form_link():
     path = os.path.join(E.REPO, "event.json")
     with open(path, encoding="utf-8") as file:
@@ -631,6 +645,7 @@ def test_the_event_file_reads_the_window_text_and_the_repo(tmp_path):
     assert "submissions" not in site_export.load_event(str(bad))
 
 
+@needs_event_file
 def test_the_command_line_defaults_to_closed_and_takes_the_link_from_env(
         drive, tmp_path):
     upload(drive, "Ann Lee", "alpha", {"model.py": E.CALL})

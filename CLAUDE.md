@@ -291,9 +291,9 @@ others call the full big blind (currently they only call what was posted).
   in it runs), `arena/event.py` (`python -m arena.event`: import, review,
   approve, run, export; state under `event/`), `arena/replays.py` (a played
   hand in the compact form the site replays), `arena/site_export.py` (results
-  site with an artificial delay and spacing so it feels live), `site/` (the
-  static pages, plain ES modules, Tailwind compiled from `site-src/`, no
-  external requests) and `event.json` (the Home page text). The round is one
+  site with an artificial delay and spacing so it feels live). The pages themselves (`site/`, `site-src/`, `tests/site_js/`) and the
+  Home page text (`event.json`) are the organiser's and are gitignored: they
+  are not in this repository. The round is one
   heads-up round robin, each pairing a duplicate match; best bb/100 wins.
 - The worker and remote model run on Windows, macOS and Linux (replies are
   read by a thread, not `select`; the process tree is killed with `taskkill`
