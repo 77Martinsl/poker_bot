@@ -10,7 +10,7 @@ from pydantic import (
     validate_call,
 )
 
-from card import Card
+from card_utils import Card
 from game_state import GameStateView, InvalidAction
 from model import Model
 from player_action import PlayerAction

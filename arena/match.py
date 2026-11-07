@@ -7,7 +7,7 @@ from typing import Literal
 
 from arena.players import Player, build
 from arena.remote import TIME_LIMIT
-from deck import full_deck
+from card_utils import full_deck
 from engine import play_hand
 
 

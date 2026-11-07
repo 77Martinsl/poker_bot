@@ -1,6 +1,6 @@
 """Scripted models, decks and invariant checks for the engine tests."""
 
-from card import RANKS, SUITS, Card
+from card_utils import RANKS, SUITS, Card
 from game_state import GameState
 from player_action import DEALER, PlayerAction
 

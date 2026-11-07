@@ -28,13 +28,13 @@ python3-pip`.
 ### Rules for Claude
 
 - Edit only `model.py` and new files you add next to it. Never edit a file
-  headed `DO NOT CHANGE THIS CODE` (`card.py`, `player_action.py`,
-  `game_state.py`, `game_interface.py`, `hand_eval.py`): the organiser's
+  headed `DO NOT CHANGE THIS CODE` (`card_utils.py`, `player_action.py`,
+  `game_state.py`, `game_interface.py`): the organiser's
   copies are what play, so local changes only make your tests lie.
 - The model is pickled. Keep its attributes plain data (numbers, lists,
   dicts, numpy arrays, model weights). No lambdas, open files, sockets,
   threads or generators as attributes. Load weights and data in `__init__`.
-- Imports are flat (`from card import Card`): run code from the repo root,
+- Imports are flat (`from card_utils import Card`): run code from the repo root,
   with `.venv/bin/python`.
 - Never guess a `GameStateView` name: use only those listed below. Editors
   cannot autocomplete them, and any other name raises `AttributeError`.
@@ -117,7 +117,7 @@ Fields: `player_id`, `kind` (`"fold"`, `"call"`, `"raise"`, `"reveal_card"`,
 Only the engine builds `reveal_card` and `win`; returning them from `run` is
 an illegal move.
 
-`Card` (`card.py`): `Card.parse("AS")`, `card.rank` (`"2".."9"`, `"T"`, `"J"`,
+`Card` (`card_utils.py`): `Card.parse("AS")`, `card.rank` (`"2".."9"`, `"T"`, `"J"`,
 `"Q"`, `"K"`, `"A"`), `card.suit` (`"C"`, `"D"`, `"H"`, `"S"`), `card.value`
 (2 to 14, ace high), `str(card) == "AS"`. Compare ranks with `.value`, never
 with the rank strings.
@@ -154,7 +154,7 @@ tuples.
 | `pot_odds` | `call_amount / (pot + call_amount)`, `0.0` when checking |
 | `validate_action(action)` | raises `InvalidAction` if `action` is illegal |
 
-`hand_eval.py`: `evaluate(cards)` takes 5 to 7 Cards (a list or tuple) and returns a tuple that
+`evaluate(cards)` (also in `card_utils.py`) takes 5 to 7 Cards (a list or tuple) and returns a tuple that
 compares with `<`/`>` (higher wins, equal splits); `category(rank)` names it,
 e.g. `"full_house"`. `rank[0]` indexes `CATEGORIES`, from `0` (high card) to
 `8` (straight flush). Typical use: `evaluate(self.hand + list(game_state.board))`.
@@ -162,7 +162,7 @@ e.g. `"full_house"`. `rank[0]` indexes `CATEGORIES`, from `0` (high card) to
 ### Example bot
 
 ```python
-from hand_eval import evaluate
+from card_utils import evaluate
 from player_action import PlayerAction
 
 
@@ -178,7 +178,7 @@ class Model:
     def run(self, actions, game_state):
         me = self.player_id
         if len(game_state.board) >= 3:
-            # Two pair or better (see hand_eval.CATEGORIES).
+            # Two pair or better (see card_utils.CATEGORIES).
             strong = evaluate(self.hand + list(game_state.board))[0] >= 2
         else:
             high, low = sorted(card.value for card in self.hand)[::-1]
@@ -199,7 +199,7 @@ pays out the pot. From the repo root:
 
 ```python
 import random
-from deck import full_deck
+from card_utils import full_deck
 from engine import play_hand
 from model import Model
 
@@ -219,24 +219,36 @@ instead. An empty `faults` means your bot played legally.
 Install the test tools once: `.venv/bin/pip install -r requirements-dev.txt`.
 
 - `.venv/bin/python -m pytest tests/test_model.py -q`: is `model.Model` a
-  valid submission? It must pickle and play every baseline with no faults
-  and under the 10 s per move limit. A failure prints the fault.
+  valid submission? It is pickled and played from that pickle in its own
+  worker process, as in the arena, against every dummy bot: no faults
+  allowed (exceptions, illegal moves, or a move over the 10 s limit). A
+  failure prints the fault.
 - `.venv/bin/python -m evals`: how strong is it? Plays your model heads-up
-  against each baseline bot and prints your bb/100 (big blinds won per 100
-  hands) with a 95% confidence interval. Options: `--opponents tight
-  equity`, `--deals 500`, `--rounds 3`, `--table` (one table with all of
-  them), `--model module:Class`.
+  against each dummy bot and prints your bb/100 (big blinds won per 100
+  hands), its 95% confidence interval and a verdict (`ahead`, `behind`, or
+  `unclear` when the interval includes 0). Options: `--opponents tight
+  bots/team_b/team_b.pkl` (dummy names and other teams' pickles),
+  `--deals 1000`, `--times 3` (repeat with new decks), `--table` (one table
+  with everyone), `--model module:Class`, `--name`.
 
-Baselines (`evals/baselines.py`): sanity bots `fold`, `call`, `random`,
-`shove` (losing to these means a bug) and sparring bots `tight` and
-`equity` (simple but sensible play). Results are only meaningful when the
-interval does not straddle 0; add deals or rounds to narrow it. Beating the
-baselines does not predict a tournament result: that depends on the other
-teams' bots and the scoring, which are not known.
+Dummy bots (`arena/dummies.py`): `fold`, `call`, `random`, `shove` (simple:
+you should beat `fold` clearly, but `shove` and `random` punish bots that
+play too tight or passively) and `tight`, `equity` (simple but sensible
+play). Expect wide intervals: at 500 deals they are often ±50-100 bb/100.
+Beating the dummies does not predict a tournament result: that depends on
+the other teams' bots and the scoring, which are not known.
 
-Card luck is cancelled by replaying every deck once per seat rotation. Your
-model is rebuilt from its pickle for each rotation and round, and keeps its
-memory within one (e.g. to learn opponents by `teams`).
+Every deck is replayed once per seat rotation, which reduces card luck
+(roughly 0-40% narrower intervals), it does not remove it. Your model is
+rebuilt from its pickle for each rotation and keeps its memory within one
+(e.g. to learn opponents by `teams`).
+
+### Submitting
+
+Not decided yet (see below). The arena expects one folder per team: the
+pickle named after the team next to the code it needs, e.g.
+`bots/team_a/team_a.pkl` and `bots/team_a/model.py`. The pickle stores your
+class by reference, so the module must be importable from that folder.
 
 ### Common mistakes
 
@@ -269,7 +281,9 @@ others call the full big blind (currently they only call what was posted).
   `poker_bot_infrastructure` repo is reference only: never port its live
   ladder, SQLite, results site or websocket code.
 - Scope: pickled `Model` submissions, bot-vs-bot match evaluation, action
-  validation. Simplicity over features. The tournament side is deferred.
+  validation, and the arena (`arena/`): matches between team pickles in
+  sandboxed workers, raw results, bankroll and checkpoints. Simplicity
+  over features; no database, website or live ladder.
 - Architecture: one shared `GameState` per hand, owned by the engine
   (`engine.py`). Its `process_action` validates betting actions and
   `deal_card` before changing anything. Models only ever see a
@@ -280,10 +294,15 @@ others call the full big blind (currently they only call what was posted).
   change the shared state (`view._state`), rewrite `GameStateView.PUBLIC`,
   read every hole card and the deck through `sys._getframe` or `gc`, and
   edit Cards and actions with `object.__setattr__`. Per-seat copies would
-  not fix this. Requirement for the organiser's engine: each model runs in
-  its own sandboxed process (which also guards the OS and handles time
-  limits, `sys.exit` and crashes). `engine.play_hand` is in-process and only
-  for trusted, local play.
+  not fix this. So team models run in `arena.remote.RemoteModel` workers
+  (`arena/worker.py`): one process each, a memory limit, a per-call
+  timeout (a timed-out or crashed worker stays dead: check/fold for the
+  rest of the match), stdout and stdin redirected, and the parent never
+  unpickles anything a worker sends (replies are size-limited JSON). A
+  separate process is not a sandbox: for real submissions run workers
+  under `--launcher` (e.g. bwrap or a container with no network and a
+  read-only filesystem). `engine.play_hand` alone is in-process and only for
+  trusted play.
 - `engine.play_hand` never trusts a returned action: anything not exactly a
   `PlayerAction` is a fault, and the rest is rebuilt from its fields and
   validated before it is applied or shown to other seats.
@@ -291,14 +310,33 @@ others call the full big blind (currently they only call what was posted).
   its player is `to_act`, and the engine applies the returned action.
   `engine.play_hand` is one hand only; match format (seating, button
   rotation, duplicate deals, carrying stacks) belongs to its caller.
-- Layers: `engine.play_hand` (one hand) <- `evals.match.play_match` (one
-  match: seat rotation over shared decks, fresh models per rotation,
-  bb/100 with a CI, faults, move times) <- `evals/__main__.py` (CLI) and
-  the planned `arena/`. `play_match` only uses the model protocol (`seed`,
-  `run`, optional `close`), so models may be proxies to other processes.
-- `engine.py`, `deck.py`, `evals/stats.py` and `evals/match.py` are covered
-  by `tests/` (pytest + Hypothesis, pinned in `requirements-dev.txt`). Keep
-  them passing. `tests/test_model.py` runs the team's own `Model`.
+- Layers: `engine` (one hand) <- `arena` (orchestration) <- `evals`
+  (scoring). `arena.match.play_match(players, MatchConfig) -> MatchLog`
+  builds models (`arena.players.build`: `RemoteModel` for a `.pkl`, a
+  dummy in-process) and runs one match:
+  - `mode="duplicate"` (evals): every deck once per seat rotation, fresh
+    models per rotation, seating shuffled from the seed (3+ players),
+    stacks reset every hand.
+  - `mode="tournament"` (the real thing): one model per team for the whole
+    match, a new deck every hand, the button moves, stacks carry over
+    (from `MatchConfig.stacks`, e.g. the bankroll file), busted teams are
+    out, and every model with a `checkpoint` is saved to
+    `checkpoint_dir/<team>.pkl` at the end (on by default).
+  `MatchLog` holds raw per-hand facts (`HandLog`: seats, net, faults), no
+  statistics. `arena.results.ResultStore` appends logs as JSON lines;
+  `load_bankroll`/`save_bankroll` keep team chips. `evals.score.score` and
+  `leaderboard` turn logs into bb/100 with CIs; evals receives arena's
+  `repeat_match` as a parameter (`evals.__main__.measure`), so its scoring
+  never depends on how matches are run.
+- CLIs: `python -m arena PLAYER...` (folders, pickles, dummy names;
+  `--mode`, `--format table|round-robin`, `--bankroll`, `--results`,
+  `--checkpoints`, `--launcher`) and `python -m evals` (`--leaderboard
+  RESULTS` ranks an arena results file).
+- `engine.py`, `card_utils.py`, `arena/` (except the CLI and dummies) and
+  `evals/stats.py`, `evals/score.py` are covered by `tests/` (pytest +
+  Hypothesis, pinned in `requirements-dev.txt`; arena tests in
+  `tests/arena_tests/`, about 30 s in total). Keep them passing.
+  `tests/test_model.py` runs the team's own `Model`.
 - A new `GameState` query must also be added to `GameStateView.PUBLIC` and
   to the API tables above.
 - Validation uses Pydantic v2 in strict mode, and only at entry points:

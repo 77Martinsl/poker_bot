@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import ConfigDict, model_validator
 from pydantic.dataclasses import dataclass
 
-from card import Card
+from card_utils import Card
 
 DEALER = -1  # the dealer's player id
 

@@ -10,7 +10,7 @@ from pydantic import (
     validate_call,
 )
 
-from card import Card
+from card_utils import Card
 from player_action import DEALER, PlayerAction
 
 Street = Literal["preflop", "flop", "turn", "river"]

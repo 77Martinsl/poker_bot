@@ -6,7 +6,7 @@ import pytest
 from hypothesis import given, settings, strategies as st
 from pydantic import ValidationError
 
-from card import Card
+from card_utils import Card
 from engine import payouts, play_hand
 from game_interface import GameInterface
 from game_state import GameState, GameStateView, InvalidAction

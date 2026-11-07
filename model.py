@@ -1,4 +1,4 @@
-from card import Card
+from card_utils import Card
 from game_state import GameStateView
 from player_action import PlayerAction
 

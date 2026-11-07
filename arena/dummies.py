@@ -11,9 +11,7 @@ ones repeatable and is ignored by the rest.
 
 import random
 
-from card import Card
-from deck import full_deck
-from hand_eval import evaluate
+from card_utils import Card, evaluate, full_deck
 from player_action import PlayerAction
 
 

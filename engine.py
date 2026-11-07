@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 
-from card import Card
+from card_utils import Card, evaluate
 from game_interface import GameInterface
 from game_state import GameState, GameStateView, InvalidAction
-from hand_eval import evaluate
 from player_action import PlayerAction
 
 

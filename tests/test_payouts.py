@@ -3,7 +3,7 @@ import copy
 from hypothesis import given, strategies as st
 
 from engine import payouts
-from hand_eval import evaluate
+from card_utils import evaluate
 from poker_test_helpers import cards, std_deck
 
 NEUTRAL = cards("2C 7D 9H JC 4S")

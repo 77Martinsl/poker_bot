@@ -1,5 +1,4 @@
-from card import RANKS, SUITS, Card
-from deck import full_deck
+from card_utils import RANKS, SUITS, Card, full_deck
 
 
 def test_D01_52_distinct_cards_every_combination():
