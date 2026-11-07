@@ -111,6 +111,7 @@ tuples.
 |---|---|
 | `button`, `small_blind`, `big_blind` | player id; chips; chips |
 | `stacks`, `bets`, `folded`, `acted` | per player: chips behind, chips bet this street, bools |
+| `teams` | per player: team name. Seats change between hands, names do not: your team is `teams[self.player_id]`, a team's seat is `teams.index(name)` |
 | `board` | Cards dealt so far |
 | `street` | `"preflop"`, `"flop"`, `"turn"`, `"river"` |
 | `pot` | every chip put in this hand, this street's bets included |

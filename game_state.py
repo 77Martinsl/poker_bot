@@ -54,11 +54,17 @@ class GameState:
         last_raise   size of the last full raise this street (the next
                      raise must be at least this much more)
         to_act       player id to act, None when the street is closed
+        teams        team name, per player: the seat changes every hand,
+                     the name does not
     """
 
-    def __init__(self, stacks: list[int] = [500, 500]):
-        """stacks: chips per player; player i has stacks[i]."""
-        self.setup_hand(stacks)
+    def __init__(
+        self,
+        stacks: list[int] = [500, 500],
+        teams: list[str] | None = None,
+    ):
+        """stacks, teams: per player; player i has stacks[i]."""
+        self.setup_hand(stacks, teams=teams)
 
     # -- setup ---------------------------------------------------------------
 
@@ -69,8 +75,13 @@ class GameState:
         button: NonNegativeInt = 0,
         small_blind: PositiveInt = 10,
         big_blind: PositiveInt = 20,
+        teams: list[Annotated[str, Field(min_length=1)]] | None = None,
     ):
-        """Seats one player per stack and posts the blinds."""
+        """
+        Seats one player per stack and posts the blinds.
+
+        teams: the team in each seat; defaults to "seat 0", "seat 1", ...
+        """
         count = len(stacks)
         # The types check each argument; these check them against each other.
         if button >= count:
@@ -82,6 +93,15 @@ class GameState:
                 f"small_blind {small_blind} is bigger than big_blind "
                 f"{big_blind}"
             )
+        if teams is None:
+            teams = [f"seat {p}" for p in range(count)]
+        if len(teams) != count:
+            raise ValueError(
+                f"{len(teams)} teams for {count} stacks: give one per seat"
+            )
+        if len(set(teams)) != count:
+            raise ValueError(f"team names must be unique, not {teams}")
+        self.teams = list(teams)
         self.button = button
         self.small_blind = small_blind
         self.big_blind = big_blind
@@ -353,7 +373,7 @@ class GameStateView:
     PUBLIC = frozenset({
         # the table
         "button", "small_blind", "big_blind", "stacks", "bets", "folded",
-        "acted", "board", "street", "pot", "last_raise", "to_act",
+        "acted", "board", "street", "pot", "last_raise", "to_act", "teams",
         "num_players", "players_in_hand", "active_players",
         "is_street_closed", "is_hand_over", "current_bet",
         # any player
