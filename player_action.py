@@ -1,14 +1,18 @@
 # DO NOT CHANGE THIS CODE
 
-from dataclasses import dataclass
 from typing import Literal
+
+from pydantic import ConfigDict, model_validator
+from pydantic.dataclasses import dataclass
 
 from card import Card
 
 DEALER = -1  # the dealer's player id
 
 
-@dataclass(frozen=True)
+# Pydantic checks each field's type on construction (strict: no coercion, so
+# True is not a player id); _check_kind adds the rules between fields.
+@dataclass(frozen=True, config=ConfigDict(strict=True))
 class PlayerAction:
     """
     One move at the table, by a player or by the dealer.
@@ -27,33 +31,27 @@ class PlayerAction:
     amount: int = 0  # raise total
     card: Card | None = None  # the card revealed
 
-    def __post_init__(self):
-        # Checks the action on its own (not against the game state yet)
-        if self.kind not in ("fold", "call", "raise", "reveal_card"):
-            raise ValueError(f"unknown action {self.kind!r}")
-        if type(self.player_id) is not int:
-            raise ValueError(
-                f"player_id must be an int, not {self.player_id!r}"
-            )
+    @model_validator(mode="after")
+    def _check_kind(self):
+        # Checks the action on its own (not against the game state yet).
         if self.kind == "reveal_card":
             if self.player_id != DEALER:
                 raise ValueError("only the dealer reveals cards")
-            if not isinstance(self.card, Card):
-                raise ValueError(
-                    f"reveal_card needs a Card, not {self.card!r}"
-                )
+            if self.card is None:
+                raise ValueError("reveal_card needs a Card")
         else:
             if self.player_id == DEALER:
                 raise ValueError(f"the dealer cannot {self.kind}")
             if self.card is not None:
                 raise ValueError(f"{self.kind} takes no card")
         if self.kind == "raise":
-            if type(self.amount) is not int or self.amount <= 0:
+            if self.amount <= 0:
                 raise ValueError(
-                    f"raise needs a whole number of chips, not {self.amount!r}"
+                    f"raise needs chips > 0, not {self.amount}"
                 )
         elif self.amount != 0:
             raise ValueError(f"{self.kind} takes no amount")
+        return self
 
     # Use these constructors rather than PlayerAction(...) directly.
 

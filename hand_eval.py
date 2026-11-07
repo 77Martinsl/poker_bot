@@ -1,7 +1,11 @@
-# DO NOT CHANGE THIS CODE
+# NOTE: DO NOT CHANGE THIS CODE
 
 from collections import Counter
+from collections.abc import Sequence
 from itertools import combinations
+from typing import Annotated
+
+from pydantic import ConfigDict, Field, validate_call
 
 from card import Card
 
@@ -19,8 +23,14 @@ CATEGORIES = [
 ]
 
 
-def evaluate(cards: list[Card]) -> tuple[int, ...]:
-    """The rank of the best 5-card hand among 5 to 7 cards.
+# Pydantic checks the cards against the type hint (strict: Cards only, any
+# sequence of 5 to 7 of them) and raises ValidationError, a ValueError.
+@validate_call(config=ConfigDict(strict=True))
+def evaluate(
+    cards: Annotated[Sequence[Card], Field(min_length=5, max_length=7)],
+) -> tuple[int, ...]:
+    """
+    The rank of the best 5-card hand among 5 to 7 cards.
 
     Ranks compare with < and >: a higher rank wins, equal ranks split. The
     first number is the category (CATEGORIES[rank[0]] names it), the rest
@@ -28,8 +38,6 @@ def evaluate(cards: list[Card]) -> tuple[int, ...]:
 
         evaluate(hand + list(game_state.board))
     """
-    if not 5 <= len(cards) <= 7:
-        raise ValueError(f"evaluate needs 5 to 7 cards, not {len(cards)}")
     if len(set(cards)) != len(cards):
         raise ValueError(f"duplicate cards in {[str(c) for c in cards]}")
     return max(_rank_five(five) for five in combinations(cards, 5))

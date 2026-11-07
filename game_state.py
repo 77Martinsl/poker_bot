@@ -1,6 +1,14 @@
 # DO NOT CHANGE THIS CODE
 
-from typing import Literal
+from typing import Annotated, Literal
+
+from pydantic import (
+    ConfigDict,
+    Field,
+    NonNegativeInt,
+    PositiveInt,
+    validate_call,
+)
 
 from card import Card
 from player_action import DEALER, PlayerAction
@@ -17,9 +25,10 @@ class InvalidAction(ValueError):
     """The action is not legal in the current game state."""
 
 
-def _is_chips(value) -> bool:
-    """A whole, non-negative number of chips (bool is not a number here)."""
-    return type(value) is int and value >= 0
+# Checks a call's arguments against their type hints and raises
+# ValidationError (a ValueError) if they don't match. strict: no coercion,
+# so "5" and True are not chips.
+_validated = validate_call(config=ConfigDict(strict=True))
 
 
 class GameState:
@@ -53,16 +62,26 @@ class GameState:
 
     # -- setup ---------------------------------------------------------------
 
+    @_validated
     def setup_hand(
         self,
-        stacks: list[int],
-        button: int = 0,
-        small_blind: int = 10,
-        big_blind: int = 20,
+        stacks: Annotated[list[NonNegativeInt], Field(min_length=2)],
+        button: NonNegativeInt = 0,
+        small_blind: PositiveInt = 10,
+        big_blind: PositiveInt = 20,
     ):
         """Seats one player per stack and posts the blinds."""
-        _check_setup(stacks, button, small_blind, big_blind)
         count = len(stacks)
+        # The types check each argument; these check them against each other.
+        if button >= count:
+            raise ValueError(
+                f"button must be a player id 0..{count - 1}, not {button}"
+            )
+        if small_blind > big_blind:
+            raise ValueError(
+                f"small_blind {small_blind} is bigger than big_blind "
+                f"{big_blind}"
+            )
         self.button = button
         self.small_blind = small_blind
         self.big_blind = big_blind
@@ -83,14 +102,11 @@ class GameState:
         self._commit(big, min(big_blind, self.stacks[big]))
         self._pass_turn(after=big)
 
-    def set_stack(self, player_id: int, chips: int):
+    @_validated
+    def set_stack(self, player_id: NonNegativeInt, chips: NonNegativeInt):
         """Chips behind for one player."""
-        if not (type(player_id) is int and 0 <= player_id < self.num_players):
-            raise ValueError(f"no player {player_id!r}")
-        if not _is_chips(chips):
-            raise ValueError(
-                f"chips must be a whole number >= 0, not {chips!r}"
-            )
+        if player_id >= self.num_players:
+            raise ValueError(f"no player {player_id}")
         self.stacks[player_id] = chips
 
     # -- queries: the table --------------------------------------------------
@@ -263,6 +279,7 @@ class GameState:
         self.acted[player_id] = True
         self._pass_turn(after=player_id)
 
+    @_validated
     def deal_card(self, card: Card):
         """Adds a card to the board; the 3rd, 4th and 5th open a street.
 
@@ -270,8 +287,6 @@ class GameState:
         hand is over, while betting is still open, and for a card already
         on the board.
         """
-        if not isinstance(card, Card):
-            raise InvalidAction(f"the dealer must deal a Card, not {card!r}")
         if self.is_hand_over:
             raise InvalidAction("the hand is over")
         if not self.is_street_closed:
@@ -322,26 +337,6 @@ class GameState:
             if player_id in waiting:
                 self.to_act = player_id
                 return
-
-
-def _check_setup(stacks, button, small_blind, big_blind):
-    """Raises ValueError unless setup_hand's arguments make a playable
-    hand."""
-    count = len(stacks)
-    if count < 2:
-        raise ValueError(f"a hand needs at least 2 players, not {count}")
-    if not all(_is_chips(chips) for chips in stacks):
-        raise ValueError(f"stacks must be whole numbers >= 0, not {stacks!r}")
-    if not (type(button) is int and 0 <= button < count):
-        raise ValueError(
-            f"button must be a player id 0..{count - 1}, not {button!r}"
-        )
-    if not (_is_chips(small_blind) and _is_chips(big_blind)
-            and 0 < small_blind <= big_blind):
-        raise ValueError(
-            "blinds must be whole numbers with 0 < small_blind <= "
-            f"big_blind, not {small_blind!r} and {big_blind!r}"
-        )
 
 
 class GameStateView:

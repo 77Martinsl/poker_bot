@@ -1,4 +1,14 @@
-# DO NOT CHANGE THIS CODE
+# NOTE: DO NOT CHANGE THIS CODE
+
+from typing import Annotated
+
+from pydantic import (
+    ConfigDict,
+    Field,
+    NonNegativeInt,
+    SkipValidation,
+    validate_call,
+)
 
 from card import Card
 from game_state import GameStateView, InvalidAction
@@ -12,16 +22,20 @@ class GameInterface:
     The engine keeps game_state up to date; this only reads it.
     """
 
-    # DO NOT CHANGE THIS CODE
+    # NOTE: DO NOT CHANGE THIS CODE
+    # Pydantic checks the arguments against their types (strict: no
+    # coercion). The model is not checked: any object with seed() and run()
+    # will do, it need not subclass Model.
+    @validate_call(
+        config=ConfigDict(strict=True, arbitrary_types_allowed=True)
+    )
     def __init__(
         self,
-        model: Model,
+        model: SkipValidation[Model],
         game_state: GameStateView,
-        player_id: int,
-        hand: list[Card],
+        player_id: NonNegativeInt,
+        hand: Annotated[list[Card], Field(min_length=2, max_length=2)],
     ):
-        if len(hand) != 2 or not all(isinstance(card, Card) for card in hand):
-            raise ValueError(f"a hand is 2 Cards, not {hand!r}")
         self.model = model
         self.game_state = game_state
         self.player_id = player_id  # checked against every action returned
@@ -32,6 +46,7 @@ class GameInterface:
         """Takes the actions since your last turn and returns your move."""
         action = self.model.run(actions, self.game_state)
         # Type, then id, then the rules: each check relies on the one before.
+        # A plain isinstance, not Pydantic: its message names run().
         if not isinstance(action, PlayerAction):
             raise InvalidAction(
                 "run() must return a PlayerAction, not "

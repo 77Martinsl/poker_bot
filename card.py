@@ -1,27 +1,25 @@
-# DO NOT CHANGE THIS CODE
+# NOTE: DO NOT CHANGE THIS CODE
 
-from dataclasses import dataclass
+from typing import Literal, get_args
 
-RANKS = "23456789TJQKA"
-SUITS = "CDHS"
+from pydantic import ConfigDict
+from pydantic.dataclasses import dataclass
+
+Rank = Literal["2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K", "A"]
+Suit = Literal["C", "D", "H", "S"]
+
+RANKS = "".join(get_args(Rank))  # "23456789TJQKA", lowest first
+SUITS = "".join(get_args(Suit))  # "CDHS"
 
 
-@dataclass(frozen=True)
+# Pydantic checks the fields against their types on construction and raises
+# ValidationError (a ValueError) if they don't match. strict: no coercion.
+@dataclass(frozen=True, config=ConfigDict(strict=True))
 class Card:
     """A playing card, e.g. Card("A", "S") or Card.parse("AS")."""
 
-    rank: str  # one of RANKS
-    suit: str  # one of SUITS
-
-    def __post_init__(self):
-        # Type and length first: `in` on a non-str raises TypeError, and ""
-        # is in every string.
-        if not (isinstance(self.rank, str) and len(self.rank) == 1
-                and self.rank in RANKS):
-            raise ValueError(f"unknown rank {self.rank!r}")
-        if not (isinstance(self.suit, str) and len(self.suit) == 1
-                and self.suit in SUITS):
-            raise ValueError(f"unknown suit {self.suit!r}")
+    rank: Rank
+    suit: Suit
 
     @classmethod
     def parse(cls, text):
