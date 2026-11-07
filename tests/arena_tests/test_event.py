@@ -436,7 +436,7 @@ def test_the_event_file_is_tidied(tmp_path):
     assert site_export.load_event(str(path)) == {
         "tagline": "Go", "intro": ["a"], "prize": "300",
         "timeline": [{"time": "12:00", "title": "S", "detail": "d"}],
-        "rules": [], "contact": "", "repo": ""}
+        "rules": [], "contact": "", "repo": "", "whatsapp": ""}
     path.write_text("[1]")
     with pytest.raises(SystemExit):
         site_export.load_event(str(path))
@@ -617,6 +617,7 @@ def test_the_repositorys_event_file_never_holds_the_form_link():
     assert "forms.gle" not in text and "docs.google.com/forms" not in text
     found = site_export.load_event(path)
     assert found["repo"] == "https://github.com/Manchester-AI-Society/poker_bot"
+    assert found["whatsapp"] == "https://tr.ee/5W_MS_DJK9"
     assert found["submissions"] == {"opens": "16:00", "closes": "18:00"}
 
 

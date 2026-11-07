@@ -4,11 +4,13 @@ Write a bot that plays no-limit Texas hold'em. Your bot is a `Model` in
 `model.py`. It is pickled and submitted, and the organisers' engine plays it
 against other teams' bots.
 
+**Join the participants' WhatsApp group** for announcements and questions: https://tr.ee/5W_MS_DJK9
+
 ## 1. Fork and set up
 
-1. **Get the code.** Fork https://github.com/Manchester-AI-Society/poker_bot
-   on GitHub and clone your fork (or just clone it:
-   `git clone https://github.com/Manchester-AI-Society/poker_bot.git`).
+1. **Fork the repo.** Fork https://github.com/Manchester-AI-Society/poker_bot
+   on GitHub (your own copy, under your account) and clone **your fork**. Do
+   not clone the original: you would have nowhere to keep your work.
 2. Create a virtual environment and install the dependencies (Python 3.10+;
    Windows, macOS and Linux all work):
 

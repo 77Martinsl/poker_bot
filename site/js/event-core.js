@@ -15,8 +15,10 @@ export function normalizeEvent(raw) {
     .slice(0, 30)
     .map((row) => ({ time: text(row.time, 40), title: text(row.title, 120), detail: text(row.detail) }));
   const repo = text(raw.repo, 200);
+  const whatsapp = text(raw.whatsapp, 200);
   const event = {
     repo: repo.startsWith('https://') ? repo : '',
+    whatsapp: whatsapp.startsWith('https://') ? whatsapp : '',
     tagline: text(raw.tagline, 200),
     intro: texts(raw.intro),
     prize: text(raw.prize, 200),

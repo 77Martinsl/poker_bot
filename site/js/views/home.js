@@ -46,7 +46,8 @@ export function homeView(ctx) {
       { class: 'home-cta' },
       h('a', { class: 'button', href: '#/submit' }, 'How to submit'),
       h('a', { class: 'button', href: '#/tournament' }, 'Tournament'),
-      event && event.repo ? h('a', { class: 'button', href: event.repo, target: '_blank', rel: 'noopener noreferrer' }, 'Get the code') : null,
+      event && event.repo ? h('a', { class: 'button', href: event.repo, target: '_blank', rel: 'noopener noreferrer' }, 'Fork the code') : null,
+      event && event.whatsapp ? h('a', { class: 'button', href: event.whatsapp, target: '_blank', rel: 'noopener noreferrer' }, 'Join the WhatsApp group') : null,
     ),
   );
 
