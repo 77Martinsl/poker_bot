@@ -196,8 +196,29 @@ why its move was replaced: an exception in `seed` or `run`, or an illegal
 move, is not fatal; the engine checks (nothing owed) or folds for you
 instead. An empty `faults` means your bot played legally.
 
-Run the engine's own tests with `.venv/bin/pip install -r
-requirements-dev.txt`, then `.venv/bin/python -m pytest -q`.
+### Checking and measuring your bot
+
+Install the test tools once: `.venv/bin/pip install -r requirements-dev.txt`.
+
+- `.venv/bin/python -m pytest tests/test_model.py -q`: is `model.Model` a
+  valid submission? It must pickle and play every baseline with no faults
+  and under the 10 s per move limit. A failure prints the fault.
+- `.venv/bin/python -m evals`: how strong is it? Plays your model heads-up
+  against each baseline bot and prints your bb/100 (big blinds won per 100
+  hands) with a 95% confidence interval. Options: `--opponents tight
+  equity`, `--deals 500`, `--rounds 3`, `--table` (one table with all of
+  them), `--model module:Class`.
+
+Baselines (`evals/baselines.py`): sanity bots `fold`, `call`, `random`,
+`shove` (losing to these means a bug) and sparring bots `tight` and
+`equity` (simple but sensible play). Results are only meaningful when the
+interval does not straddle 0; add deals or rounds to narrow it. Beating the
+baselines does not predict a tournament result: that depends on the other
+teams' bots and the scoring, which are not known.
+
+Card luck is cancelled by replaying every deck once per seat rotation. Your
+model is rebuilt from its pickle for each rotation and round, and keeps its
+memory within one (e.g. to learn opponents by `teams`).
 
 ### Common mistakes
 
@@ -247,8 +268,14 @@ others call the full big blind (currently they only call what was posted).
   its player is `to_act`, and the engine applies the returned action.
   `engine.play_hand` is one hand only; match format (seating, button
   rotation, duplicate deals, carrying stacks) belongs to its caller.
-- `engine.py` and `deck.py` are covered by `tests/` (pytest + Hypothesis,
-  pinned in `requirements-dev.txt`). Keep them passing.
+- Layers: `engine.play_hand` (one hand) <- `evals.match.play_match` (one
+  match: seat rotation over shared decks, fresh models per rotation,
+  bb/100 with a CI, faults, move times) <- `evals/__main__.py` (CLI) and
+  the planned `arena/`. `play_match` only uses the model protocol (`seed`,
+  `run`, optional `close`), so models may be proxies to other processes.
+- `engine.py`, `deck.py`, `evals/stats.py` and `evals/match.py` are covered
+  by `tests/` (pytest + Hypothesis, pinned in `requirements-dev.txt`). Keep
+  them passing. `tests/test_model.py` runs the team's own `Model`.
 - A new `GameState` query must also be added to `GameStateView.PUBLIC` and
   to the API tables above.
 - Validation uses Pydantic v2 in strict mode, and only at entry points:
