@@ -17,7 +17,8 @@ from player_action import PlayerAction
 
 
 class GameInterface:
-    """Runs your model. The organiser's copy of this file is what plays.
+    """
+    Runs your model. The organiser's copy of this file is what plays.
 
     The engine keeps game_state up to date; this only reads it.
     """

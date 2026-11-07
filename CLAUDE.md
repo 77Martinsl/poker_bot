@@ -176,39 +176,28 @@ class Model:
 
 ### Testing locally
 
-There is no engine in this repo. This plays one hand between two models from
-the repo root (swap in your own `Model`); it stops when the hand is over and
-does not pay out the pot.
+`engine.play_hand` plays one hand exactly as the organiser's engine does and
+pays out the pot. From the repo root:
 
 ```python
 import random
-from card import Card, RANKS, SUITS
-from game_state import GameState, GameStateView
-from game_interface import GameInterface
+from deck import full_deck
+from engine import play_hand
 from model import Model
-from player_action import PlayerAction
 
-deck = [Card(rank, suit) for rank in RANKS for suit in SUITS]
-random.shuffle(deck)
-state = GameState([500, 500])
-view = GameStateView(state)
-players = [
-    GameInterface(Model(), view, p, [deck.pop(), deck.pop()])
-    for p in range(state.num_players)
-]
-unseen = [[] for _ in players]  # actions each player has not seen yet
-while not state.is_hand_over:
-    if state.is_street_closed:
-        action = PlayerAction.reveal_card(deck.pop())
-    else:
-        p = state.to_act
-        action = players[p].process_action(unseen[p])
-        unseen[p] = []
-    state.process_action(action)
-    for pending in unseen:
-        pending.append(action)
-print(state.street, [str(c) for c in state.board], state.stacks, state.pot)
+deck = full_deck()
+random.Random(1).shuffle(deck)  # same seed, same cards
+result = play_hand([Model(), Model()], deck, stacks=[500, 500])
+print(result.net, [str(c) for c in result.board], result.faults)
 ```
+
+`result.net` is chips won or lost per seat. `result.faults` maps a seat to
+why its move was replaced: an exception in `seed` or `run`, or an illegal
+move, is not fatal; the engine checks (nothing owed) or folds for you
+instead. An empty `faults` means your bot played legally.
+
+Run the engine's own tests with `.venv/bin/pip install -r
+requirements-dev.txt`, then `.venv/bin/python -m pytest tests -q`.
 
 ### Common mistakes
 
@@ -235,15 +224,22 @@ to submit (pickle format, Python version).
   ladder, SQLite, results site or websocket code.
 - Scope: pickled `Model` submissions, bot-vs-bot match evaluation, action
   validation. Simplicity over features. The tournament side is deferred.
-- Architecture: one `GameState` class for everyone. Each agent (the engine
-  and every player) holds its own copy and applies the same
-  `PlayerAction`s with `process_action`, which validates betting actions
-  and `deal_card` before changing anything. Models only ever see a
-  `GameStateView`; `GameStateView.PUBLIC` is the whitelist of what they may
-  read. Private information (hole cards, player id) lives in
+- Architecture: one shared `GameState` per hand, owned by the engine
+  (`engine.py`). Its `process_action` validates betting actions and
+  `deal_card` before changing anything. Models only ever see a
+  `GameStateView` of it; `GameStateView.PUBLIC` is the whitelist of what
+  they may read. Private information (hole cards, player id) lives in
   `GameInterface` and the model, never in `GameState`.
+- The view stops mistakes, not cheating: a model in the same process can
+  reach the shared state with `object.__getattribute__(view, "_state")`
+  and change it. Accepted for now; fix it (per-seat copies, or bots in
+  separate processes) before running untrusted bots for real.
 - The engine routes turns: `GameInterface` assumes it is only called when
   its player is `to_act`, and the engine applies the returned action.
+  `engine.play_hand` is one hand only; match format (seating, button
+  rotation, duplicate deals, carrying stacks) belongs to its caller.
+- `engine.py` and `deck.py` are covered by `tests/` (pytest + Hypothesis,
+  pinned in `requirements-dev.txt`). Keep them passing.
 - A new `GameState` query must also be added to `GameStateView.PUBLIC` and
   to the API tables above.
 - Validation uses Pydantic v2 in strict mode, and only at entry points:
